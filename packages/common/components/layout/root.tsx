@@ -2,7 +2,6 @@
 import {
     CommandSearch,
     FeedbackWidget,
-    IntroDialog,
     SettingsModal,
     Sidebar,
 } from '@repo/common/components';
@@ -79,7 +78,6 @@ export const RootLayout: FC<TRootLayout> = ({ children }) => {
                             </div>
                             <SideDrawer />
                             <FeedbackWidget />
-                            <IntroDialog />
                         </div>
                     </AgentProvider>
                 </motion.div>

@@ -66,6 +66,7 @@ type State = {
     showSuggestions: boolean;
     editor: any;
     chatMode: ChatMode;
+    domain: string;
     context: string;
     imageAttachment: { base64?: string; file?: File };
     abortController: AbortController | null;
@@ -92,6 +93,7 @@ type Actions = {
     setModel: (model: Model) => void;
     setEditor: (editor: any) => void;
     setContext: (context: string) => void;
+    setDomain: (domain: string) => void;
     fetchRemainingCredits: () => Promise<void>;
     setImageAttachment: (imageAttachment: { base64?: string; file?: File }) => void;
     clearImageAttachment: () => void;
@@ -461,6 +463,7 @@ export const useChatStore = create(
             isFetched: false,
         },
         showSuggestions: true,
+        domain: '',
 
         setCustomInstructions: (customInstructions: string) => {
             const existingConfig = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}');
@@ -920,6 +923,12 @@ export const useChatStore = create(
         getCurrentThread: () => {
             const state = get();
             return state.threads.find(t => t.id === state.currentThreadId) || null;
+        },
+
+        setDomain: (domain: string) => {
+            set(state => {
+                state.domain = domain;
+            });
         },
     }))
 );

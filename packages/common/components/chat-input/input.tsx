@@ -1,5 +1,5 @@
 'use client';
-import { useAuth } from '@clerk/nextjs';
+import { useAuth, useUser } from '@clerk/nextjs';
 import {
     ImageAttachment,
     ImageDropzoneRoot,
@@ -17,7 +17,7 @@ import { useAgentStream } from '../../hooks/agent-provider';
 import { useChatEditor } from '../../hooks/use-editor';
 import { useChatStore } from '../../store';
 import { ExamplePrompts } from '../exmaple-prompts';
-import { ChatModeButton, GeneratingStatus, SendStopButton, WebSearchButton } from './chat-actions';
+import { GeneratingStatus, SendStopButton, WebSearchButton, DomainButton } from './chat-actions';
 import { ChatEditor } from './chat-editor';
 import { ImageUpload } from './image-upload';
 
@@ -64,6 +64,7 @@ export const ChatInput = ({
     const { dropzonProps, handleImageUpload } = useImageAttachment();
     const { push } = useRouter();
     const chatMode = useChatStore(state => state.chatMode);
+
     const sendMessage = async () => {
         if (
             !isSignedIn &&
@@ -157,7 +158,7 @@ export const ChatInput = ({
                                             <GeneratingStatus />
                                         ) : (
                                             <Flex gap="xs" items="center" className="shrink-0">
-                                                <ChatModeButton />
+                                                <DomainButton />
                                                 {/* <AttachmentButton /> */}
                                                 <WebSearchButton />
                                                 {/* <ToolsMenu /> */}
@@ -263,18 +264,25 @@ type AnimatedTitlesProps = {
 
 const AnimatedTitles = ({ titles = [] }: AnimatedTitlesProps) => {
     const [greeting, setGreeting] = React.useState<string>('');
+    const { user } = useUser();
 
     React.useEffect(() => {
         const getTimeBasedGreeting = () => {
             const hour = new Date().getHours();
-
-            if (hour >= 5 && hour < 12) {
-                return 'Good morning';
-            } else if (hour >= 12 && hour < 18) {
-                return 'Good afternoon';
-            } else {
-                return 'Good evening';
+            const baseGreeting = hour >= 5 && hour < 12 
+                ? 'Good morning' 
+                : hour >= 12 && hour < 18 
+                ? 'Good afternoon' 
+                : 'Good evening';
+            
+            // Add user's name if authenticated
+            if (user?.firstName) {
+                return `${baseGreeting}, ${user.firstName}`;
+            } else if (user?.fullName) {
+                return `${baseGreeting}, ${user.fullName}`;
             }
+            
+            return baseGreeting;
         };
 
         setGreeting(getTimeBasedGreeting());
@@ -288,7 +296,7 @@ const AnimatedTitles = ({ titles = [] }: AnimatedTitlesProps) => {
         }, 60000); // Check every minute
 
         return () => clearInterval(interval);
-    }, [greeting]);
+    }, [greeting, user]);
 
     return (
         <Flex

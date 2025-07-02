@@ -3,10 +3,26 @@ import { Button, Textarea } from '@repo/ui';
 import { IconCircleCheckFilled, IconHelpSmall, IconX } from '@tabler/icons-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useRef, useState } from 'react';
+import { create } from 'zustand';
+
+// Global state for feedback widget
+interface FeedbackStore {
+    isOpen: boolean;
+    open: () => void;
+    close: () => void;
+    toggle: () => void;
+}
+
+export const useFeedbackStore = create<FeedbackStore>((set, get) => ({
+    isOpen: false,
+    open: () => set({ isOpen: true }),
+    close: () => set({ isOpen: false }),
+    toggle: () => set({ isOpen: !get().isOpen }),
+}));
 
 export const FeedbackWidget = () => {
     const { userId } = useAuth();
-    const [isOpen, setIsOpen] = useState(false);
+    const { isOpen, close } = useFeedbackStore();
     const [feedback, setFeedback] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
@@ -27,7 +43,7 @@ export const FeedbackWidget = () => {
 
             setTimeout(() => {
                 setIsSuccess(false);
-                setIsOpen(false);
+                close();
             }, 2000);
         } catch (error) {
             console.error('Failed to submit feedback:', error);
@@ -43,25 +59,7 @@ export const FeedbackWidget = () => {
     return (
         <div className="fixed bottom-6 right-6 z-50 flex items-end justify-end">
             <AnimatePresence mode="wait">
-                {!isOpen ? (
-                    <motion.button
-                        className=" bg-muted-foreground/30 text-background flex h-6 w-6 items-center justify-center rounded-full shadow-2xl"
-                        onClick={() => {
-                            setIsOpen(true);
-                            setTimeout(() => {
-                                inputRef.current?.focus();
-                            }, 100);
-                        }}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 10 }}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        transition={{ duration: 0.2 }}
-                    >
-                        <IconHelpSmall size={24} strokeWidth={2} className="text-background" />
-                    </motion.button>
-                ) : (
+                {isOpen && (
                     <motion.div
                         className="border-hard w-80 max-w-xs rounded-xl border bg-white shadow-2xl"
                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
@@ -77,7 +75,7 @@ export const FeedbackWidget = () => {
                                         variant="ghost"
                                         size="icon-xs"
                                         rounded="full"
-                                        onClick={() => setIsOpen(false)}
+                                        onClick={close}
                                     >
                                         <IconX size={14} strokeWidth={2} />
                                     </Button>

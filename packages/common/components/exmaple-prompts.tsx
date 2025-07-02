@@ -11,39 +11,28 @@ import { Editor } from '@tiptap/react';
 
 export const examplePrompts = {
     howTo: [
-        'How to plan a sustainable vegetable garden for small spaces?',
-        'How to prepare for your first international travel experience?',
-        'How to set up a personal budget that actually works?',
-        'How to improve your public speaking skills for professional settings?',
+        'How to apply for a work visa in the United States as a software engineer from India?',
+        'How to calculate the return on investment (ROI) for a rental property purchase?',
+        'How to design a reinforced concrete beam for a residential building foundation?',
+        'How to sponsor a spouse for permanent residency in Canada?',
+        'How to conduct a comparative market analysis (CMA) when pricing a home for sale?',
     ],
 
     explainConcepts: [
-        'Explain how blockchain technology works in simple terms.',
-        'What is quantum computing and how does it differ from traditional computing?',
-        'Explain the concept of emotional intelligence and its importance.',
-        'How does carbon capture technology work to combat climate change?',
-    ],
-
-    creative: [
-        "Write a short story about a chance encounter that changes someone's life.",
-        'Create a recipe for a fusion dish combining Italian and Japanese cuisines.',
-        'Design a fictional sustainable city of the future.',
-        'Develop a character profile for the protagonist of a science fiction novel.',
+        'Explain the concept of factor of safety in structural engineering and why it\'s critical.',
+        'Explain the difference between asylum and refugee status in immigration law.',
+        'Explain the difference between a buyer\'s market and a seller\'s market in real estate.',
+        'What is the difference between dead load, live load, and wind load in structural analysis?',
+        'What is the priority date system in US family-based immigration and how does it work?',
     ],
 
     advice: [
-        "What's the best approach to negotiate a salary increase?",
-        'How should I prepare for a marathon as a beginner runner?',
-        'What strategies can help manage work-life balance when working remotely?',
-        'What should I consider when adopting a pet for the first time?',
-    ],
-
-    analysis: [
-        'Analyze the potential impact of artificial intelligence on healthcare.',
-        'Compare different approaches to addressing climate change.',
-        'Examine the pros and cons of various renewable energy sources.',
-        'Analyze how social media has transformed communication in the past decade.',
-    ],
+        'What advice would you give to first-time homebuyers in today\'s market conditions?',
+        'What advice would you give to a new civil engineer starting their career in structural design?',
+        'What advice would you give to someone whose immigration application was denied?',
+        'Should I buy or rent property in a high-cost area like San Francisco or New York?',
+        'What considerations should guide the choice between concrete and steel in building construction?',
+    ]
 };
 
 export const getRandomPrompt = (category?: keyof typeof examplePrompts) => {
@@ -63,9 +52,7 @@ export const getRandomPrompt = (category?: keyof typeof examplePrompts) => {
 const categoryIcons = {
     howTo: { name: 'How to', icon: IconQuestionMark, color: '!text-yellow-700' },
     explainConcepts: { name: 'Explain Concepts', icon: IconBulb, color: '!text-blue-700' },
-    creative: { name: 'Creative', icon: IconPencil, color: '!text-green-700' },
-    advice: { name: 'Advice', icon: IconBook, color: '!text-purple-700' },
-    analysis: { name: 'Analysis', icon: IconChartBar, color: '!text-red-700' },
+    advice: { name: 'Advice', icon: IconBook, color: '!text-purple-700' }
 };
 
 export const ExamplePrompts = () => {
