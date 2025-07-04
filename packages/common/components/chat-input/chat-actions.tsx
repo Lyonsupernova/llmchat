@@ -1,7 +1,7 @@
 'use client';
 import { useUser } from '@clerk/nextjs';
 import { DotSpinner } from '@repo/common/components';
-import { useApiKeysStore, useChatStore } from '@repo/common/store';
+import { useChatStore } from '@repo/common/store';
 import { CHAT_MODE_CREDIT_COSTS, ChatMode, ChatModeConfig } from '@repo/shared/config';
 import {
     Button,
@@ -26,7 +26,7 @@ import {
 import { AnimatePresence, motion } from 'framer-motion';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { BYOKIcon, NewIcon } from '../icons';
+import { NewIcon } from '../icons';
 
 export const chatOptions = [
     {
@@ -165,9 +165,8 @@ export const WebSearchButton = () => {
     const useWebSearch = useChatStore(state => state.useWebSearch);
     const setUseWebSearch = useChatStore(state => state.setUseWebSearch);
     const chatMode = useChatStore(state => state.chatMode);
-    const hasApiKeyForChatMode = useApiKeysStore(state => state.hasApiKeyForChatMode);
 
-    if (!ChatModeConfig[chatMode]?.webSearch && !hasApiKeyForChatMode(chatMode)) return null;
+    if (!ChatModeConfig[chatMode]?.webSearch) return null;
 
     return (
         <Button
@@ -218,7 +217,6 @@ export const ChatModeOptions = ({
     isRetry?: boolean;
 }) => {
     const { isSignedIn } = useUser();
-    const hasApiKeyForChatMode = useApiKeysStore(state => state.hasApiKeyForChatMode);
     const isChatPage = usePathname().startsWith('/chat');
     const { push } = useRouter();
     return (
@@ -280,8 +278,6 @@ export const ChatModeOptions = ({
                             </div>
                             <div className="flex-1" />
                             {ChatModeConfig[option.value]?.isNew && <NewIcon />}
-
-                            {hasApiKeyForChatMode(option.value) && <BYOKIcon />}
                         </div>
                     </DropdownMenuItem>
                 ))}

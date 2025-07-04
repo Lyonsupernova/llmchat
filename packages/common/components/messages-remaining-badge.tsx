@@ -1,11 +1,10 @@
 import { useUser } from '@clerk/nextjs';
-import { useApiKeysStore, useAppStore, useChatStore } from '@repo/common/store';
+import { useAppStore, useChatStore } from '@repo/common/store';
 import { motion } from 'framer-motion';
 
 export function MessagesRemainingBadge() {
     const { user } = useUser();
     const chatMode = useChatStore(state => state.chatMode);
-    const hasApiKeys = useApiKeysStore(state => state.hasApiKeyForChatMode(chatMode));
     const creditLimit = useChatStore(state => state.creditLimit);
     const setIsSettingsOpen = useAppStore(state => state.setIsSettingsOpen);
     const setSettingTab = useAppStore(state => state.setSettingTab);
@@ -13,8 +12,7 @@ export function MessagesRemainingBadge() {
     if (
         !creditLimit.isFetched ||
         !user ||
-        (creditLimit?.remaining && creditLimit?.remaining > 5) ||
-        hasApiKeys
+        (creditLimit?.remaining && creditLimit?.remaining > 10)
     ) {
         return null;
     }
