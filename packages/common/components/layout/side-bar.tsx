@@ -1,7 +1,8 @@
 import { SignInButton, useAuth, UserButton } from '@clerk/nextjs';
 import { FullPageLoader, HistoryItem } from '@repo/common/components';
 import { useRootContext } from '@repo/common/context';
-import { Thread, useAppStore, useChatStore } from '@repo/common/store';
+import { useAppStore, useChatStore } from '@repo/common/store';
+import { Thread } from '@repo/shared/types';
 import { Button, cn, Flex } from '@repo/ui';
 import { IconArrowBarLeft, IconArrowBarRight, IconPlus, IconSearch } from '@tabler/icons-react';
 import moment from 'moment';
@@ -14,6 +15,8 @@ export const Sidebar = () => {
     const { push } = useRouter();
     const isChatPage = pathname.startsWith('/chat');
     const threads = useChatStore(state => state.threads);
+    const pinThread = useChatStore(state => state.pinThread);
+    const unpinThread = useChatStore(state => state.unpinThread);
     const { isSignedIn } = useAuth();
     const sortThreads = (threads: Thread[], sortBy: 'createdAt') => {
         return [...threads].sort((a, b) => moment(b[sortBy]).diff(moment(a[sortBy])));
@@ -64,6 +67,9 @@ export const Sidebar = () => {
                                 setIsSidebarOpen(prev => false);
                             }}
                             isActive={thread.id === currentThreadId}
+                            isPinned={thread.pinned}
+                            pinThread={pinThread}
+                            unpinThread={unpinThread}
                         />
                     ))}
                 </Flex>
