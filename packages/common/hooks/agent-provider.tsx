@@ -55,6 +55,7 @@ export const AgentProvider = ({ children }: { children: ReactNode }) => {
 
     const getSelectedMCP = useMcpToolsStore(state => state.getSelectedMCP);
     const setShowSignInModal = useAppStore(state => state.setShowSignInModal);
+    const domain = useChatStore(state => state.domain);
 
     // Fetch remaining credits when user changes
     useEffect(() => {
@@ -116,7 +117,9 @@ export const AgentProvider = ({ children }: { children: ReactNode }) => {
             };
 
             threadItemMap.set(threadItemId, updatedItem);
+            console.log('agent-provider.tsx - handleThreadItemUpdate - updatedItem', updatedItem);
             updateThreadItem(threadId, { ...updatedItem, persistToDB: true });
+            console.log('agent-provider.tsx - handleThreadItemUpdate - updateThreadItem finished');
         },
         [threadItemMap, updateThreadItem]
     );
@@ -131,6 +134,7 @@ export const AgentProvider = ({ children }: { children: ReactNode }) => {
             abortController.signal.addEventListener('abort', () => {
                 console.info('Abort controller triggered');
                 setIsGenerating(false);
+                console.log('agent-provider.tsx - runAgent - updateThreadItem', body.threadId, body.threadItemId);
                 updateThreadItem(body.threadId, {
                     id: body.threadItemId,
                     status: 'ABORTED',
@@ -162,6 +166,7 @@ export const AgentProvider = ({ children }: { children: ReactNode }) => {
                     }
 
                     setIsGenerating(false);
+                    console.log('agent-provider.tsx - runAgent - updateThreadItem', body.threadId, body.threadItemId);
                     updateThreadItem(body.threadId, {
                         id: body.threadItemId,
                         status: 'ERROR',
@@ -329,11 +334,13 @@ export const AgentProvider = ({ children }: { children: ReactNode }) => {
             }
 
             const threadId = currentThreadId?.toString() || newThreadId;
+            console.log('handleSubmit - threadId', threadId);
             if (!threadId) return;
 
             // Update thread title
-            updateThread({ id: threadId, title: formData.get('query') as string });
+            await updateThread({ id: threadId, title: formData.get('query') as string });
 
+            console.log('handleSubmit - updateThread finished');
             const optimisticAiThreadItemId = existingThreadItemId || nanoid();
             const query = formData.get('query') as string;
             const imageAttachment = formData.get('imageAttachment') as string;
@@ -349,7 +356,7 @@ export const AgentProvider = ({ children }: { children: ReactNode }) => {
                 mode,
             };
 
-            createThreadItem(aiThreadItem);
+            await createThreadItem(aiThreadItem);
             setCurrentThreadItem(aiThreadItem);
             setIsGenerating(true);
             setCurrentSources([]);
@@ -379,7 +386,9 @@ export const AgentProvider = ({ children }: { children: ReactNode }) => {
                 parentThreadItemId: '',
                 webSearch: useWebSearch,
                 showSuggestions: showSuggestions ?? true,
+                domain: domain,
             });
+            console.log('agent-provider.tsx - handleSubmit - runAgent finished');
         },
         [
             isSignedIn,
@@ -392,6 +401,7 @@ export const AgentProvider = ({ children }: { children: ReactNode }) => {
             setIsGenerating,
             setCurrentSources,
             customInstructions,
+            domain,
             getSelectedMCP,
             updateThreadItem,
             runAgent,
@@ -400,7 +410,7 @@ export const AgentProvider = ({ children }: { children: ReactNode }) => {
 
     const updateContext = useCallback(
         (threadId: string, data: any) => {
-            console.info('Updating context', data);
+            console.info('Updating context', data, 'for threadId', threadId);
             updateThreadItem(threadId, {
                 id: data.threadItemId,
                 parentId: data.parentThreadItemId,

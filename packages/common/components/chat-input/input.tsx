@@ -82,11 +82,13 @@ export const ChatInput = ({
 
         if (!threadId) {
             const optimisticId = uuidv4();
+            console.log('creating new thread in input.tsx', optimisticId);
             push(`/chat/${optimisticId}`);
-            createThread(optimisticId, {
+            const newThread = await createThread(optimisticId, {
                 title: editor?.getText(),
             });
-            threadId = optimisticId;
+            threadId = newThread.id; // Use the real thread ID from the API response
+            console.log('finish creating new thread in input.tsx', threadId);
         }
 
         // First submit the message
@@ -95,7 +97,7 @@ export const ChatInput = ({
         imageAttachment?.base64 && formData.append('imageAttachment', imageAttachment?.base64);
         const threadItems = currentThreadId ? await getThreadItems(currentThreadId.toString()) : [];
 
-        console.log('threadItems', threadItems);
+        console.log('start handleSubmit in input.tsx');
 
         handleSubmit({
             formData,
@@ -105,6 +107,8 @@ export const ChatInput = ({
             ),
             useWebSearch,
         });
+
+        console.log('finish handleSubmit in input.tsx');
         window.localStorage.removeItem('draft-message');
         editor.commands.clearContent();
         clearImageAttachment();

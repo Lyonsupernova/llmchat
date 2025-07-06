@@ -15,7 +15,7 @@ const ChatSessionPage = ({ params }: { params: { threadId: string } }) => {
     });
     const switchThread = useChatStore(state => state.switchThread);
     const getThread = useChatStore(state => state.getThread);
-
+    
     useEffect(() => {
         if (isGenerating) {
             setShouldScroll(true);
@@ -32,14 +32,19 @@ const ChatSessionPage = ({ params }: { params: { threadId: string } }) => {
         if (!threadId) {
             return;
         }
+
+        console.log('chat/[threadId]/page.tsx - using optimistic threadId:', threadId);
+
         getThread(threadId).then(thread => {
+            console.log('chat/[threadId]/page.tsx - getThread - thread', thread);
             if (thread?.id) {
+                console.log('chat/[threadId]/page.tsx - switching to thread', thread.id);
                 switchThread(thread.id);
             } else {
                 router.push('/chat');
             }
         });
-    }, [params]);
+    }, [params])
 
     return (
         <div

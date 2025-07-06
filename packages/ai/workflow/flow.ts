@@ -103,6 +103,7 @@ export type WorkflowContextSchema = {
     threadItemId: string;
     showSuggestions: boolean;
     customInstructions?: string;
+    domain?: string;
     onFinish: (data: any) => void;
 };
 
@@ -120,6 +121,7 @@ export const runWorkflow = ({
     onFinish,
     customInstructions,
     gl,
+    domain,
 }: {
     mcpConfig: Record<string, string>;
     mode: ChatMode;
@@ -134,6 +136,7 @@ export const runWorkflow = ({
     onFinish?: (data: any) => void;
     gl?: Geo;
     customInstructions?: string;
+    domain?: string;
 }) => {
     const langfuse = new Langfuse();
     const trace = langfuse.trace({
@@ -179,6 +182,7 @@ export const runWorkflow = ({
         steps: [],
         gl,
         customInstructions,
+        domain,
         sources: [],
         summaries: [],
         answer: undefined,

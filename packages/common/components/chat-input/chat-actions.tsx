@@ -125,11 +125,6 @@ export const modelOptions = [
 
 export const domainOptions = [
     {
-        label: 'General',
-        value: 'general',
-        description: 'General purpose assistance',
-    },
-    {
         label: 'Legal',
         value: 'legal',
         description: 'Legal advice and information',

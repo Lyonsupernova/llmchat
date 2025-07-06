@@ -71,17 +71,16 @@ model TEST_Thread {
   pinned      Boolean  @default(false)
   pinnedAt    DateTime? @map("pinned_at")
   userId      String   @map("user_id")
-  projectId   String?  @map("project_id")
+  domain      String   @default("LEGAL")
   
   // Relations
   user        TEST_User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project     TEST_Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   threadItems TEST_ThreadItem[]
   
   // Indexes for performance
   @@index([userId, createdAt])
   @@index([pinned, pinnedAt])
-  @@index([projectId])
+  @@index([domain])
   @@map("TEST_threads")
 }
 
@@ -119,23 +118,6 @@ model TEST_ThreadItem {
   @@map("TEST_thread_items")
 }
 
-model TEST_Project {
-  id          String   @id @default(uuid())
-  name        String
-  description String
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  userId      String   @map("user_id")
-  
-  // Relations
-  user        TEST_User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  threads     TEST_Thread[]
-  
-  // Indexes
-  @@index([userId, createdAt])
-  @@map("TEST_projects")
-}
-
 model TEST_User {
   id        String   @id
   email     String?  @unique
@@ -145,7 +127,6 @@ model TEST_User {
   
   // Relations
   threads   TEST_Thread[]
-  projects  TEST_Project[]
   usageCounts TEST_UsageCount[]
   feedbacks TEST_Feedback[]
 

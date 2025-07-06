@@ -82,6 +82,7 @@ export async function executeStream({
             gl,
             mcpConfig: data.mcpConfig || {},
             showSuggestions: data.showSuggestions || false,
+            domain: data.domain,
             onFinish: onFinish,
         });
 
