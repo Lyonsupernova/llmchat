@@ -2,6 +2,7 @@ import { TEST_Thread, TEST_ThreadItem, Prisma } from '@prisma/client';
 import { Thread, ThreadItem } from '@repo/shared/types';
 import { prisma } from '../client';
 import { createClerkClient } from '@clerk/nextjs/server';
+import { domainOptionToPrismaEnum, isValidDomainOption } from '../../common/utils/domain-converter';
 
 // Type definitions for the service
 export type CreateThreadInput = {
@@ -142,12 +143,18 @@ export class ThreadService {
       console.log('prisma-service.ts - createThread - input', input);
       await this.ensureUserExists(input.userId);
       
+      // Convert domain from frontend format to Prisma enum format
+      let prismaDomain = 'LEGAL'; // Default fallback
+      if (input.domain && isValidDomainOption(input.domain)) {
+        prismaDomain = domainOptionToPrismaEnum(input.domain);
+      }
+      
       console.log('prisma-service.ts - createThread - creating thread');
       const thread = await prisma.tEST_Thread.create({
         data: {
           title: input.title,
           userId: input.userId,
-          domain: input.domain || 'legal',
+          domain: prismaDomain,
           pinned: input.pinned || false,
           pinnedAt: input.pinned ? new Date() : null,
         },
@@ -204,10 +211,16 @@ export class ThreadService {
         orderDirection = 'desc',
       } = filters;
 
+      // Convert domain from frontend format to Prisma enum format
+      let prismaDomain;
+      if (domain && isValidDomainOption(domain)) {
+        prismaDomain = domainOptionToPrismaEnum(domain);
+      }
+
       const where: Prisma.TEST_ThreadWhereInput = {
         userId: userId,
         ...(pinned !== undefined && { pinned }),
-        ...(domain && { domain }),
+        ...(prismaDomain && { domain: prismaDomain }),
       };
 
       const threads = await prisma.tEST_Thread.findMany({

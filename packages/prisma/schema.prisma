@@ -71,7 +71,7 @@ model TEST_Thread {
   pinned      Boolean  @default(false)
   pinnedAt    DateTime? @map("pinned_at")
   userId      String   @map("user_id")
-  domain      String   @default("LEGAL")
+  domain      TEST_Domain   @default(LEGAL)
   
   // Relations
   user        TEST_User @relation(fields: [userId], references: [id], onDelete: Cascade)
