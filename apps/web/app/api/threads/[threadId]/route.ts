@@ -44,7 +44,7 @@ export async function PUT(
         const { threadId } = params;
         console.log('api/threads/[threadId] PUT - update thread request', request, 'for threadId', threadId);
         const body = await request.json();
-        const { title, pinned, pinnedAt } = body;
+        const { title, pinned, pinnedAt, certifiedStatus } = body;
 
         // Verify ownership
         const existingThread = await ThreadService.getThread(threadId, userId);
@@ -58,6 +58,7 @@ export async function PUT(
             title,
             pinned,
             pinnedAt,
+            certifiedStatus,
         });
         console.log('api/threads/[threadId] PUT - updated thread', thread);
 

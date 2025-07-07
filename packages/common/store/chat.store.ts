@@ -145,6 +145,7 @@ type Actions = {
     clearOptimisticThreadItemIdMapping: (realThreadItemId: string) => void;
     isThreadExpertCertified: (threadId: string) => boolean;
     getExpertCertificationStatus: (threadId: string) => 'expert-certified' | 'not-certified' | 'none';
+    updateThreadCertifiedStatus: (threadId: string, certifiedStatus: 'PENDING' | 'CERTIFIED' | 'NOT_CERTIFIED') => Promise<void>;
 };
 
 // Utility function to debounce function calls
@@ -866,41 +867,8 @@ export const useChatStore = create(
             const thread = state.threads.find(t => t.id === realId || t.id === threadId);
             if (!thread) return false;
 
-            // Check if thread is from yesterday
-            const threadCreatedAt = thread.createdAt instanceof Date ? thread.createdAt : new Date(thread.createdAt);
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            
-            const isFromYesterday = 
-                threadCreatedAt.getDate() === yesterday.getDate() &&
-                threadCreatedAt.getMonth() === yesterday.getMonth() &&
-                threadCreatedAt.getFullYear() === yesterday.getFullYear();
-
-            if (isFromYesterday) {
-                // Get all threads from yesterday, sorted by creation time (newest first)
-                const yesterdayThreads = state.threads
-                    .filter(t => {
-                        const tCreatedAt = t.createdAt instanceof Date ? t.createdAt : new Date(t.createdAt);
-                        return tCreatedAt.getDate() === yesterday.getDate() &&
-                               tCreatedAt.getMonth() === yesterday.getMonth() &&
-                               tCreatedAt.getFullYear() === yesterday.getFullYear();
-                    })
-                    .sort((a, b) => {
-                        const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
-                        const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
-                        return bTime - aTime;
-                    });
-
-                // Find the position of this thread in yesterday's threads (using real ID)
-                const threadIndex = yesterdayThreads.findIndex(t => t.id === realId);
-                
-                // Last 3 threads are NOT certified (positions 0, 1, 2 in the sorted array)
-                // All other yesterday threads are certified
-                return threadIndex >= 3;
-            }
-
-            // For all other threads (including today's threads with answers), return false
-            return false;
+            // Use the actual certifiedStatus field from the database
+            return thread.certifiedStatus === 'CERTIFIED';
         },
 
         getExpertCertificationStatus: (threadId: string) => {
@@ -912,46 +880,39 @@ export const useChatStore = create(
             const thread = state.threads.find(t => t.id === realId || t.id === threadId);
             if (!thread) return 'none';
 
-            // Check if thread is from yesterday
-            const threadCreatedAt = thread.createdAt instanceof Date ? thread.createdAt : new Date(thread.createdAt);
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            
-            const isFromYesterday = 
-                threadCreatedAt.getDate() === yesterday.getDate() &&
-                threadCreatedAt.getMonth() === yesterday.getMonth() &&
-                threadCreatedAt.getFullYear() === yesterday.getFullYear();
-
-            if (isFromYesterday) {
-                // Get all threads from yesterday, sorted by creation time (newest first)
-                const yesterdayThreads = state.threads
-                    .filter(t => {
-                        const tCreatedAt = t.createdAt instanceof Date ? t.createdAt : new Date(t.createdAt);
-                        return tCreatedAt.getDate() === yesterday.getDate() &&
-                               tCreatedAt.getMonth() === yesterday.getMonth() &&
-                               tCreatedAt.getFullYear() === yesterday.getFullYear();
-                    })
-                    .sort((a, b) => {
-                        const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
-                        const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
-                        return bTime - aTime;
-                    });
-
-                // Find the position of this thread in yesterday's threads (using real ID)
-                const threadIndex = yesterdayThreads.findIndex(t => t.id === realId);
-                
-                // Last 3 threads (most recent) are NOT certified
-                if (threadIndex >= 0 && threadIndex < 3) {
-                    return 'not-certified';
-                }
-                // All other yesterday threads are expert certified
-                if (threadIndex >= 3) {
+            // Use the actual certifiedStatus field from the database
+            switch (thread.certifiedStatus) {
+                case 'CERTIFIED':
                     return 'expert-certified';
-                }
+                case 'NOT_CERTIFIED':
+                    return 'not-certified';
+                case 'PENDING':
+                default:
+                    return 'none';
             }
+        },
 
-            // For all other threads (including today's threads with answers), return 'none'
-            return 'none';
+        updateThreadCertifiedStatus: async (threadId: string, certifiedStatus: 'PENDING' | 'CERTIFIED' | 'NOT_CERTIFIED') => {
+            try {
+                // Check if this is an optimistic ID and map it to real ID
+                const realId = get().getRealIdFromOptimistic(threadId) || threadId;
+                
+                await ThreadApiService.updateThread(realId, { certifiedStatus });
+                
+                set(state => {
+                    const index = state.threads.findIndex(t => t.id === realId || t.id === threadId);
+                    if (index !== -1) {
+                        state.threads[index].certifiedStatus = certifiedStatus;
+                    }
+                    if (state.currentThreadId === threadId || state.currentThreadId === realId) {
+                        if (state.currentThread) {
+                            state.currentThread.certifiedStatus = certifiedStatus;
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to update thread certified status:', error);
+            }
         },
 
         // Optimistic ID mapping actions

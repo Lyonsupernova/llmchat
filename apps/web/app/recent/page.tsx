@@ -8,9 +8,13 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@repo/ui';
-import { IconClock, IconPlus } from '@tabler/icons-react';
+import { IconClock, IconPlus, IconShield, IconShieldCheck, IconShieldX } from '@tabler/icons-react';
 import { CommandItem } from 'cmdk';
 import { MoreHorizontal } from 'lucide-react';
 import moment from 'moment';
@@ -22,6 +26,8 @@ export default function ThreadsPage() {
     const updateThread = useChatStore(state => state.updateThread);
     const deleteThread = useChatStore(state => state.deleteThread);
     const switchThread = useChatStore(state => state.switchThread);
+    const getExpertCertificationStatus = useChatStore(state => state.getExpertCertificationStatus);
+    const updateThreadCertifiedStatus = useChatStore(state => state.updateThreadCertifiedStatus);
     const { push } = useRouter();
     const [editingId, setEditingId] = useState<string | null>(null);
     const [title, setTitle] = useState('');
@@ -106,9 +112,35 @@ export default function ThreadsPage() {
                                                         onClick={e => e.stopPropagation()}
                                                     />
                                                 ) : (
-                                                    <p className="line-clamp-2 w-full text-sm font-medium">
-                                                        {thread.title}
-                                                    </p>
+                                                    <div className="flex items-center gap-2 w-full">
+                                                        <p className="line-clamp-2 flex-1 text-sm font-medium">
+                                                            {thread.title}
+                                                        </p>
+                                                        {getExpertCertificationStatus(thread.id) === 'none' && (
+                                                            <IconShield 
+                                                                size={14} 
+                                                                strokeWidth={2} 
+                                                                className="text-orange-600 dark:text-orange-400 flex-shrink-0" 
+                                                                title="Pending Certification"
+                                                            />
+                                                        )}
+                                                        {getExpertCertificationStatus(thread.id) === 'expert-certified' && (
+                                                            <IconShieldCheck 
+                                                                size={14} 
+                                                                strokeWidth={2} 
+                                                                className="text-green-600 dark:text-green-400 flex-shrink-0" 
+                                                                title="Expert Certified"
+                                                            />
+                                                        )}
+                                                        {getExpertCertificationStatus(thread.id) === 'not-certified' && (
+                                                            <IconShieldX 
+                                                                size={14} 
+                                                                strokeWidth={2} 
+                                                                className="text-red-600 dark:text-red-400 flex-shrink-0" 
+                                                                title="Not Certified"
+                                                            />
+                                                        )}
+                                                    </div>
                                                 )}
                                                 <p className="text-muted-foreground/50 flex flex-row items-center gap-1 text-xs">
                                                     <IconClock size={12} strokeWidth="2" />
@@ -150,6 +182,36 @@ export default function ThreadsPage() {
                                                     >
                                                         Delete Thread
                                                     </DropdownMenuItem>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuSub>
+                                                        <DropdownMenuSubTrigger>
+                                                            <IconShield size={16} strokeWidth={2} className="mr-2" />
+                                                            Certification Status
+                                                        </DropdownMenuSubTrigger>
+                                                        <DropdownMenuSubContent>
+                                                            <DropdownMenuItem
+                                                                onClick={() => updateThreadCertifiedStatus(thread.id, 'PENDING')}
+                                                                className={getExpertCertificationStatus(thread.id) === 'none' ? 'bg-accent' : ''}
+                                                            >
+                                                                <IconShield size={16} strokeWidth={2} className="mr-2" />
+                                                                Pending
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem
+                                                                onClick={() => updateThreadCertifiedStatus(thread.id, 'CERTIFIED')}
+                                                                className={getExpertCertificationStatus(thread.id) === 'expert-certified' ? 'bg-accent' : ''}
+                                                            >
+                                                                <IconShieldCheck size={16} strokeWidth={2} className="mr-2 text-green-600" />
+                                                                Certified
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem
+                                                                onClick={() => updateThreadCertifiedStatus(thread.id, 'NOT_CERTIFIED')}
+                                                                className={getExpertCertificationStatus(thread.id) === 'not-certified' ? 'bg-accent' : ''}
+                                                            >
+                                                                <IconShieldX size={16} strokeWidth={2} className="mr-2 text-red-600" />
+                                                                Not Certified
+                                                            </DropdownMenuItem>
+                                                        </DropdownMenuSubContent>
+                                                    </DropdownMenuSub>
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
                                         </div>

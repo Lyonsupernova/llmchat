@@ -2,7 +2,7 @@ import { TEST_Thread, TEST_ThreadItem, Prisma } from '@prisma/client';
 import { Thread, ThreadItem } from '@repo/shared/types';
 import { prisma } from '../client';
 import { createClerkClient } from '@clerk/nextjs/server';
-import { domainOptionToPrismaEnum, isValidDomainOption } from '../../common/utils/domain-converter';
+import { domainOptionToPrismaEnum, isValidDomainOption, isValidPrismaCertifiedStatus } from '../../common/utils/domain-converter';
 
 // Type definitions for the service
 export type CreateThreadInput = {
@@ -17,6 +17,7 @@ export type UpdateThreadInput = {
   title?: string;
   pinned?: boolean;
   pinnedAt?: Date;
+  certifiedStatus?: 'PENDING' | 'CERTIFIED' | 'NOT_CERTIFIED';
 };
 
 export type CreateThreadItemInput = {
@@ -258,6 +259,11 @@ export class ThreadService {
         updateData.pinnedAt = input.pinned ? new Date() : null;
       }
       if (input.pinnedAt !== undefined) updateData.pinnedAt = input.pinnedAt;
+      if (input.certifiedStatus !== undefined) {
+        if (isValidPrismaCertifiedStatus(input.certifiedStatus)) {
+          updateData.certifiedStatus = input.certifiedStatus;
+        }
+      }
 
       const thread = await prisma.tEST_Thread.update({
         where: { id: input.id },

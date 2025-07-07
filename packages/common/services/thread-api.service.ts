@@ -10,6 +10,7 @@ export type UpdateThreadRequest = {
   title?: string;
   pinned?: boolean;
   pinnedAt?: Date;
+  certifiedStatus?: 'PENDING' | 'CERTIFIED' | 'NOT_CERTIFIED';
 };
 
 export type CreateThreadItemRequest = {

@@ -254,6 +254,31 @@ export const ChatInput = ({
 
                     {renderChatBottom()}
                     {!currentThreadId && showGreeting && <ExamplePrompts />}
+                    {!currentThreadId && showGreeting && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ duration: 0.5, delay: 0.2 }}
+                            className="flex w-full justify-center px-6"
+                        >
+                            <p className="text-center text-xs text-muted-foreground/60 max-w-lg">
+                                AI can make mistakes, please always consult an expert. Read our{' '}
+                                <a 
+                                    href="/terms" 
+                                    className="text-muted-foreground/80 underline hover:text-muted-foreground transition-colors"
+                                >
+                                    terms
+                                </a>{' '}
+                                and{' '}
+                                <a 
+                                    href="/privacy" 
+                                    className="text-muted-foreground/80 underline hover:text-muted-foreground transition-colors"
+                                >
+                                    privacy policy
+                                </a>
+                            </p>
+                        </motion.div>
+                    )}
 
                     {/* <ChatFooter /> */}
                 </Flex>

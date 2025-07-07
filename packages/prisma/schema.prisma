@@ -72,6 +72,7 @@ model TEST_Thread {
   pinnedAt    DateTime? @map("pinned_at")
   userId      String   @map("user_id")
   domain      TEST_Domain   @default(LEGAL)
+  certifiedStatus TEST_CertifiedStatus @default(PENDING) @map("certified_status")
   
   // Relations
   user        TEST_User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -81,6 +82,7 @@ model TEST_Thread {
   @@index([userId, createdAt])
   @@index([pinned, pinnedAt])
   @@index([domain])
+  @@index([certifiedStatus])
   @@map("TEST_threads")
 }
 
@@ -158,6 +160,12 @@ enum TEST_Domain {
   LEGAL
   CIVIL_ENGINEERING
   REAL_ESTATE
+}
+
+enum TEST_CertifiedStatus {
+  PENDING
+  CERTIFIED
+  NOT_CERTIFIED
 }
 
 model TEST_Feedback {
