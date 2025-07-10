@@ -149,7 +149,7 @@ export const getModelFromChatMode = (mode?: string): ModelEnum => {
             return ModelEnum.O4_Mini;
         case ChatMode.GPT_4_1_Mini:
         default:
-            return ModelEnum.GPT_4o_Mini;
+            return ModelEnum.GPT_4_1;
     }
 };
 

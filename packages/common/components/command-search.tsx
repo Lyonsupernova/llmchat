@@ -111,15 +111,6 @@ export const CommandSearch = () => {
             },
         },
         {
-            name: 'Use your own API key',
-            icon: IconKey,
-            action: () => {
-                setIsSettingsOpen(true);
-                setSettingTab('api-keys');
-                onClose();
-            },
-        },
-        {
             name: 'Remove All Threads',
             icon: IconTrash,
             action: () => {

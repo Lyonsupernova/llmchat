@@ -141,7 +141,8 @@ export const QuestionPrompt = ({ threadItem }: { threadItem: ThreadItem }) => {
                     const formData = new FormData();
                     formData.append('query', query);
                     const threadItems = await getThreadItems(threadItem.threadId);
-                    updateThreadItem(threadItem.threadId, {
+                    console.log('question-prompt.tsx - onClick - threadItems', threadItems);
+                    await updateThreadItem(threadItem.threadId, {
                         ...threadItem,
                         object: {
                             ...threadItem.object,
@@ -152,6 +153,7 @@ export const QuestionPrompt = ({ threadItem }: { threadItem: ThreadItem }) => {
                         },
                         status: 'COMPLETED',
                     });
+                    console.log('question-prompt.tsx - onClick - threadItems', threadItems);
                     setTimeout(() => {
                         handleSubmit({
                             formData,

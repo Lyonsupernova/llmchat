@@ -15,6 +15,7 @@ export const completionTask = createTask<WorkflowEventSchema, WorkflowContextSch
         const customInstructions = context?.get('customInstructions');
         const mode = context.get('mode');
         const webSearch = context.get('webSearch') || false;
+        const domain = context.get('domain');
 
         let messages =
             context
@@ -27,14 +28,39 @@ export const completionTask = createTask<WorkflowEventSchema, WorkflowContextSch
 
         console.log('customInstructions', customInstructions);
 
+        // Build system message content
+        let systemContent = `Today is ${getHumanizedDate()}. and current location is ${context.get('gl')?.city}, ${context.get('gl')?.country}.`;
+        
+        // Add domain-specific instructions
+        if (domain) {
+            switch (domain) {
+                case 'legal':
+                    systemContent += '\n\nYou are specialized in legal advice and information. Provide accurate, professional legal guidance while noting that this is not a substitute for professional legal counsel.';
+                    break;
+                case 'civil_engineering':
+                    systemContent += '\n\nYou are specialized in civil engineering and construction. Provide technical guidance on construction, engineering principles, and building practices.';
+                    break;
+                case 'real_estate':
+                    systemContent += '\n\nYou are specialized in real estate and property guidance. Provide insights on property markets, real estate transactions, and property management.';
+                    break;
+                default:
+                    systemContent += '\n\nYou are a helpful assistant that can answer questions and help with tasks.';
+            }
+        }
+
         if (
             customInstructions &&
             customInstructions?.length < MAX_ALLOWED_CUSTOM_INSTRUCTIONS_LENGTH
         ) {
+            systemContent += `\n\n${customInstructions}`;
+        }
+
+        // Add system message if we have domain or custom instructions
+        if (domain || customInstructions) {
             messages = [
                 {
                     role: 'system',
-                    content: `Today is ${getHumanizedDate()}. and current location is ${context.get('gl')?.city}, ${context.get('gl')?.country}. \n\n ${customInstructions}`,
+                    content: systemContent,
                 },
                 ...messages,
             ];

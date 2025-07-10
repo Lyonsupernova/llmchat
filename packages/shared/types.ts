@@ -1,12 +1,6 @@
 import { ChatMode } from './config';
 
-export type Project = {
-    id: string;
-    name: string;
-    createdAt: Date;
-    updatedAt: Date;
-    description: string;
-};
+export type CertifiedStatus = 'PENDING' | 'CERTIFIED' | 'NOT_CERTIFIED';
 
 export type Thread = {
     id: string;
@@ -15,7 +9,8 @@ export type Thread = {
     updatedAt: Date;
     pinned: boolean;
     pinnedAt: Date;
-    projectId?: string;
+    domain?: string;
+    certifiedStatus?: CertifiedStatus;
 };
 
 export type SubStep = {

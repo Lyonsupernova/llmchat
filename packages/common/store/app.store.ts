@@ -43,7 +43,7 @@ export const useAppStore = create(
         isSidebarOpen: true,
         isSourcesOpen: false,
         isSettingsOpen: false,
-        settingTab: 'api-keys',
+        settingTab: 'personalization',
         showSignInModal: false,
         setIsSidebarOpen: (prev: (prev: boolean) => boolean) =>
             set({ isSidebarOpen: prev(get().isSidebarOpen) }),

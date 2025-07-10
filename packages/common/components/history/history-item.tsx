@@ -6,11 +6,16 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+    DropdownMenuSub,
     DropdownMenuTrigger,
     Flex,
     Input,
 } from '@repo/ui';
 import { MoreHorizontal } from 'lucide-react';
+import { IconShieldCheck, IconShieldX, IconShield } from '@tabler/icons-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -33,12 +38,17 @@ export const HistoryItem = ({
     const { push } = useRouter();
     const { threadId: currentThreadId } = useParams();
     const updateThread = useChatStore(state => state.updateThread);
+    const getExpertCertificationStatus = useChatStore(state => state.getExpertCertificationStatus);
+    const updateThreadCertifiedStatus = useChatStore(state => state.updateThreadCertifiedStatus);
     const [isEditing, setIsEditing] = useState(false);
     const [title, setTitle] = useState(thread.title);
     const deleteThread = useChatStore(state => state.deleteThread);
     const historyInputRef = useRef<HTMLInputElement>(null);
     const switchThread = useChatStore(state => state.switchThread);
     const [openOptions, setOpenOptions] = useState(false);
+
+    // Get expert certification status
+    const certificationStatus = getExpertCertificationStatus(thread.id);
 
     useEffect(() => {
         if (isEditing) {
@@ -70,7 +80,10 @@ export const HistoryItem = ({
 
     const containerClasses = cn(
         'gap-2 w-full group w-full relative flex flex-row items-center h-7 py-0.5 pl-2 pr-1 rounded-sm hover:bg-quaternary',
-        isActive || isEditing ? 'bg-tertiary' : ''
+        isActive || isEditing ? 'bg-tertiary' : '',
+        certificationStatus === 'none' && !isActive && !isEditing ? 'bg-orange-50 border border-orange-200 dark:bg-orange-900/10 dark:border-orange-800/30' : '',
+        certificationStatus === 'expert-certified' && !isActive && !isEditing ? 'bg-green-50 border border-green-200 dark:bg-green-900/10 dark:border-green-800/30' : '',
+        certificationStatus === 'not-certified' && !isActive && !isEditing ? 'bg-red-50 border border-red-200 dark:bg-red-900/10 dark:border-red-800/30' : ''
     );
 
     const handleEditClick = () => {
@@ -111,9 +124,35 @@ export const HistoryItem = ({
                         className="flex-1 overflow-hidden"
                         gap="none"
                     >
-                        <p className="hover:text-foreground line-clamp-1 w-full text-xs">
-                            {thread.title}
-                        </p>
+                        <div className="flex items-center gap-1 w-full">
+                            <p className="hover:text-foreground line-clamp-1 flex-1 text-xs">
+                                {thread.title}
+                            </p>
+                            {certificationStatus === 'none' && (
+                                <IconShield 
+                                    size={12} 
+                                    strokeWidth={2} 
+                                    className="text-orange-600 dark:text-orange-400 flex-shrink-0" 
+                                    title="Pending Certification"
+                                />
+                            )}
+                            {certificationStatus === 'expert-certified' && (
+                                <IconShieldCheck 
+                                    size={12} 
+                                    strokeWidth={2} 
+                                    className="text-green-600 dark:text-green-400 flex-shrink-0" 
+                                    title="Expert Certified"
+                                />
+                            )}
+                            {certificationStatus === 'not-certified' && (
+                                <IconShieldX 
+                                    size={12} 
+                                    strokeWidth={2} 
+                                    className="text-red-600 dark:text-red-400 flex-shrink-0" 
+                                    title="Not Certified"
+                                />
+                            )}
+                        </div>
                     </Flex>
                 </Link>
             )}
@@ -161,6 +200,36 @@ export const HistoryItem = ({
                             Pin
                         </DropdownMenuItem>
                     )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                            <IconShield size={16} strokeWidth={2} className="mr-2" />
+                            Certification Status
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                            <DropdownMenuItem
+                                onClick={() => updateThreadCertifiedStatus(thread.id, 'PENDING')}
+                                className={certificationStatus === 'none' ? 'bg-accent' : ''}
+                            >
+                                <IconShield size={16} strokeWidth={2} className="mr-2" />
+                                Pending
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => updateThreadCertifiedStatus(thread.id, 'CERTIFIED')}
+                                className={certificationStatus === 'expert-certified' ? 'bg-accent' : ''}
+                            >
+                                <IconShieldCheck size={16} strokeWidth={2} className="mr-2 text-green-600" />
+                                Certified
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => updateThreadCertifiedStatus(thread.id, 'NOT_CERTIFIED')}
+                                className={certificationStatus === 'not-certified' ? 'bg-accent' : ''}
+                            >
+                                <IconShieldX size={16} strokeWidth={2} className="mr-2 text-red-600" />
+                                Not Certified
+                            </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
                 </DropdownMenuContent>
             </DropdownMenu>
         </div>

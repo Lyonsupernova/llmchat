@@ -1,51 +1,61 @@
 export const privacyPolicy = `
 ### Privacy Policy
 
----------------------------------
+Effective Date: July 2, 2025
+Last Updated: July 2, 2025
 
-### Data Handling Information
+At Experts AI, your privacy is important. This Privacy Policy explains how we collect, use, and protect your data when you use our platform.
 
-#### We Collect
+### 1. What We Collect
 
-We collect two types of information:
+When you use Experts AI, we may collect the following information:
+• Your name and email (if voluntarily provided)
+• Legal questions and any follow-up interactions
+• AI-generated and expert-verified responses
+• Technical metadata (e.g., browser type, time of use, usage frequency)
 
-1. **User-Provided Information**:
+We do not collect payment information directly; that is handled by third-party providers.
 
-   - When you register for an account or use our Service, you may provide us with personal information such as your name, email address, and other contact details.
-   - Specifically, if you wish to use the freely available GPT-4o mini model API calls, you are required to log in via Google or GitHub. This usage is limited to 10 messages a day to ensure fair usage.
-   - All the data related to this is stored locally on your browser.
+### 2. How We Use Your Data
 
-2. **Automatically Collected Information**:
-   - When you access the Service, certain information may be collected automatically. This includes your IP address, browser type, device type, and other technical information.
-   - We may also use cookies and similar tracking technologies to collect data about your interactions with our Service.
+We use your data to:
+• Generate legal content tailored to your inputs
+• Facilitate verification by licensed professionals
+• Improve platform functionality and user support
+• Detect abuse or fraud
 
-### How We Handle Your Data
+We do not sell your personal information.
 
-- **Local Storage**: All your data, including API keys, chat history, and messages, are stored locally on your browser using Local Storage and IndexedDB. We do not have a backend server to collect or store your data.
-- **Secure Requests**: When you send a message, your browser directly communicates with the API server using a secure HTTPS connection. There is no middle server, ensuring your data remains private.
-- **Proxy Requests**: For certain models, requests are forwarded through our proxy server without logging or storing any data. The proxy server simply passes your request to the model's server.
-- **No External JavaScript**: We do not run any external JavaScript on our site, ensuring high security and privacy.
-- **Data Deletion**: You can delete all your data, including API keys, configurations, and chat histories, at any time from your browser.
-- **Tracking and Cookies**: We may use tracking and error logging tools to improve our services. Cookies might be used to enhance user experience and functionality.
+### 3. Who Has Access
 
-### Use of Third-Party Services
+Only authorized personnel and licensed professionals reviewing your query can access your identifiable data.
 
-Our Service may use third-party tools and services to assist in analytics, service optimization, or for technical support. These may include:
+We may use anonymized and aggregated data internally for analytics, product improvement, or research purposes.
 
-- **PostHog**: Used for analytics to better understand user interactions with our Service.
-- **Sentry**: Used for error logging and monitoring to improve the stability and performance of our Service.
+### 4. Cookies & Tracking Technologies
 
-These third-party services have their own Privacy Policies, which we recommend you review.
+We may use cookies and similar technologies for essential site functionality, security, and analytics.
 
-### Cookies
+You can control cookies through your browser settings, but disabling them may impact some features.
 
-\`llmchat.co\` does not directly use cookies. However, some third-party services we utilize, such as PostHog and Sentry, may use cookies to monitor interactions with our Service. Additionally, cookies are used for authentication purposes. You have the option to either accept or decline these cookies and should refer to your browser settings for managing your preferences.
+### 5. Your Rights
 
-### Third-Party Links and Content
+You may request to:
+• Access or correct your personal data
+• Delete your data from our systems
+• Opt out of non-essential communications
 
-The Service may contain links to third-party websites. We advise you to review their Privacy Policies, as we have no control over their content or practices. Links, images, and other internet content are suggested by AI and are not our responsibility.
+To make a request, contact us at [support@expertsai.com].
 
-### Contact Us
+### 6. Data Security
 
-If you have any questions or concerns about this Privacy Policy, please feel free to contact us at [support@llmchat.co](mailto:support@llmchat.co). We will do our best to respond to your inquiries promptly.
+We use industry-standard encryption and secure data storage protocols. While we take reasonable precautions, no system is 100% secure. You use the platform at your own risk.
+
+### 7. Children's Privacy
+
+Experts AI is not intended for individuals under 18. We do not knowingly collect personal data from minors.
+
+### 8. Changes to This Policy
+
+We may update this Privacy Policy occasionally. Your continued use of the platform constitutes acceptance of any updated terms.
 `;

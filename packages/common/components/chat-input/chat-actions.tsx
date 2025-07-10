@@ -1,7 +1,7 @@
 'use client';
 import { useUser } from '@clerk/nextjs';
 import { DotSpinner } from '@repo/common/components';
-import { useApiKeysStore, useChatStore } from '@repo/common/store';
+import { useChatStore } from '@repo/common/store';
 import { CHAT_MODE_CREDIT_COSTS, ChatMode, ChatModeConfig } from '@repo/shared/config';
 import {
     Button,
@@ -26,7 +26,7 @@ import {
 import { AnimatePresence, motion } from 'framer-motion';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { BYOKIcon, NewIcon } from '../icons';
+import { NewIcon } from '../icons';
 
 export const chatOptions = [
     {
@@ -123,6 +123,24 @@ export const modelOptions = [
     },
 ];
 
+export const domainOptions = [
+    {
+        label: 'Legal',
+        value: 'legal',
+        description: 'Legal advice and information',
+    },
+    {
+        label: 'Civil Engineering',
+        value: 'civil_engineering',
+        description: 'Construction and engineering support',
+    },
+    {
+        label: 'Real Estate',
+        value: 'real_estate',
+        description: 'Property and real estate guidance',
+    },
+];
+
 export const AttachmentButton = () => {
     return (
         <Button
@@ -138,39 +156,12 @@ export const AttachmentButton = () => {
     );
 };
 
-export const ChatModeButton = () => {
-    const chatMode = useChatStore(state => state.chatMode);
-    const setChatMode = useChatStore(state => state.setChatMode);
-    const [isChatModeOpen, setIsChatModeOpen] = useState(false);
-    const hasApiKeyForChatMode = useApiKeysStore(state => state.hasApiKeyForChatMode);
-    const isChatPage = usePathname().startsWith('/chat');
-
-    const selectedOption =
-        (isChatPage
-            ? [...chatOptions, ...modelOptions].find(option => option.value === chatMode)
-            : [...modelOptions].find(option => option.value === chatMode)) ?? modelOptions[0];
-
-    return (
-        <DropdownMenu open={isChatModeOpen} onOpenChange={setIsChatModeOpen}>
-            <DropdownMenuTrigger asChild>
-                <Button variant={'secondary'} size="xs">
-                    {selectedOption?.icon}
-                    {selectedOption?.label}
-                    <IconChevronDown size={14} strokeWidth={2} />
-                </Button>
-            </DropdownMenuTrigger>
-            <ChatModeOptions chatMode={chatMode} setChatMode={setChatMode} />
-        </DropdownMenu>
-    );
-};
-
 export const WebSearchButton = () => {
     const useWebSearch = useChatStore(state => state.useWebSearch);
     const setUseWebSearch = useChatStore(state => state.setUseWebSearch);
     const chatMode = useChatStore(state => state.chatMode);
-    const hasApiKeyForChatMode = useApiKeysStore(state => state.hasApiKeyForChatMode);
 
-    if (!ChatModeConfig[chatMode]?.webSearch && !hasApiKeyForChatMode(chatMode)) return null;
+    if (!ChatModeConfig[chatMode]?.webSearch) return null;
 
     return (
         <Button
@@ -221,7 +212,6 @@ export const ChatModeOptions = ({
     isRetry?: boolean;
 }) => {
     const { isSignedIn } = useUser();
-    const hasApiKeyForChatMode = useApiKeysStore(state => state.hasApiKeyForChatMode);
     const isChatPage = usePathname().startsWith('/chat');
     const { push } = useRouter();
     return (
@@ -283,8 +273,6 @@ export const ChatModeOptions = ({
                             </div>
                             <div className="flex-1" />
                             {ChatModeConfig[option.value]?.isNew && <NewIcon />}
-
-                            {hasApiKeyForChatMode(option.value) && <BYOKIcon />}
                         </div>
                     </DropdownMenuItem>
                 ))}
@@ -349,5 +337,54 @@ export const SendStopButton = ({
                 )}
             </AnimatePresence>
         </div>
+    );
+};
+
+export const DomainButton = () => {
+    const domain = useChatStore(state => state.domain);
+    const setDomain = useChatStore(state => state.setDomain);
+    const [isDomainOpen, setIsDomainOpen] = useState(false);
+
+    const selectedDomain = domainOptions.find(option => option.value === domain) ?? domainOptions[0];
+
+    return (
+        <DropdownMenu open={isDomainOpen} onOpenChange={setIsDomainOpen}>
+            <DropdownMenuTrigger asChild>
+                <Button variant={'secondary'} size="xs">
+                    {selectedDomain?.label}
+                    <IconChevronDown size={14} strokeWidth={2} />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="min-w-48">
+                <DropdownMenuLabel>Select Domain</DropdownMenuLabel>
+                <DropdownMenuGroup>
+                    {domainOptions.map(option => (
+                        <DropdownMenuItem
+                            key={option.value}
+                            onSelect={() => {
+                                setDomain(option.value);
+                                setIsDomainOpen(false);
+                            }}
+                            className="h-auto"
+                        >
+                            <div className="flex w-full flex-row items-start gap-1.5 px-1.5 py-1.5">
+                                <div className="flex flex-col gap-0">
+                                    <p className="m-0 text-sm font-medium">{option.label}</p>
+                                    {option.description && (
+                                        <p className="text-muted-foreground text-xs font-light">
+                                            {option.description}
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="flex-1" />
+                                {domain === option.value && (
+                                    <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                                )}
+                            </div>
+                        </DropdownMenuItem>
+                    ))}
+                </DropdownMenuGroup>
+            </DropdownMenuContent>
+        </DropdownMenu>
     );
 };

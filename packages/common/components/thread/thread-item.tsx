@@ -12,8 +12,8 @@ import {
 import { useAnimatedText } from '@repo/common/hooks';
 import { useChatStore } from '@repo/common/store';
 import { ThreadItem as ThreadItemType } from '@repo/shared/types';
-import { Alert, AlertDescription, cn } from '@repo/ui';
-import { IconAlertCircle, IconBook } from '@tabler/icons-react';
+import { Alert, AlertDescription, Badge, cn } from '@repo/ui';
+import { IconAlertCircle, IconBook, IconShieldCheck } from '@tabler/icons-react';
 import { memo, useEffect, useMemo, useRef } from 'react';
 import { useInView } from 'react-intersection-observer';
 
@@ -33,6 +33,7 @@ export const ThreadItem = memo(
             isLast && isGenerating
         );
         const setCurrentSources = useChatStore(state => state.setCurrentSources);
+        const getExpertCertificationStatus = useChatStore(state => state.getExpertCertificationStatus);
         const messageRef = useRef<HTMLDivElement>(null);
 
         const { ref: inViewRef, inView } = useInView({});
@@ -70,6 +71,10 @@ export const ThreadItem = memo(
                 threadItem?.status === 'ERROR'
             );
         }, [threadItem]);
+
+        // Check if this thread is expert certified
+        const certificationStatus = getExpertCertificationStatus(threadItem.threadId);
+
         return (
             <CitationProvider sources={threadItem.sources || []}>
                 <div className="w-full" ref={inViewRef} id={`thread-item-${threadItem.id}`}>
@@ -85,6 +90,20 @@ export const ThreadItem = memo(
                         <div className="text-muted-foreground flex flex-row items-center gap-1.5 text-xs font-medium">
                             <IconBook size={16} strokeWidth={2} />
                             Answer
+                            {(certificationStatus === 'expert-certified' || certificationStatus === 'not-certified') && (
+                                <Badge 
+                                    variant="secondary" 
+                                    className={cn(
+                                        "ml-auto flex items-center gap-1 px-2 py-1 text-xs font-medium",
+                                        certificationStatus === 'not-certified'
+                                            ? "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800"
+                                            : "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                                    )}
+                                >
+                                    <IconShieldCheck size={12} strokeWidth={2} />
+                                    {certificationStatus === 'not-certified' ? 'Not Certified' : 'Expert Certified'}
+                                </Badge>
+                            )}
                         </div>
 
                         {threadItem.steps && (

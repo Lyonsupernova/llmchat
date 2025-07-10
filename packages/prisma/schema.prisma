@@ -1,20 +1,210 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-  // This is your Prisma schema file,
-  // learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
-  generator client {
-    provider = "prisma-client-js"
-  }
+generator client {
+  provider = "prisma-client-js"
+}
 
-  datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
-  }
+datasource db {
+  provider = "postgresql"
+  url      = "postgresql://postgres.tfzuicexjjqpwvtckyxe:U33SZSSMuF.p_Lh@aws-0-us-east-1.pooler.supabase.com:5432/postgres"
+}
 
-model Feedback {
-  id String @id @default(uuid())
+model Input {
+  id        Int      @id @default(autoincrement())
+  content   String
+  response  String?
+  createdAt DateTime @default(now()) @map("created_at")
+  verified  Boolean  @default(false)
+  domain    Domain   @default(LEGAL)
+  userId    String?  // Foreign key field
+  user      User?    @relation(fields: [userId], references: [id]) // Relation
+
+  @@map("inputs")
+}
+
+model User {
+  id        String   @id
+  email     String?  @unique
+  name      String?
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  inputs    Input[]  // Back-relation to Input model
+}
+
+enum Role {
+  USER
+  LAWYER
+  REALTOR
+  ADMIN
+}
+
+model UsageCount {
   userId String
+  feature String
+  year    String
+  month   String  // 01–12
+  count   Int  @default(0)
+
+  @@id([userId, feature, year, month])
+}
+
+enum Domain {
+  LEGAL
+  CIVIL_ENGINEERING
+  REAL_ESTATE
+  // Add more as needed
+}
+
+// =============================================================================
+// IMPROVED THREAD MODELS FOR MIGRATION FROM INDEXEDDB
+// =============================================================================
+
+model TEST_Thread {
+  id          String   @id @default(uuid())
+  title       String
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  pinned      Boolean  @default(false)
+  pinnedAt    DateTime? @map("pinned_at")
+  userId      String   @map("user_id")
+  domain      TEST_Domain   @default(LEGAL)
+  certifiedStatus TEST_CertifiedStatus @default(PENDING) @map("certified_status")
+  
+  // Relations
+  user        TEST_User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  threadItems TEST_ThreadItem[]
+  
+  // Indexes for performance
+  @@index([userId, createdAt])
+  @@index([pinned, pinnedAt])
+  @@index([domain])
+  @@index([certifiedStatus])
+  @@map("TEST_threads")
+}
+
+model TEST_ThreadItem {
+  id                String   @id @default(uuid())
+  query             String
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  threadId          String   @map("thread_id")
+  parentId          String?  @map("parent_id")
+  mode              String   // ChatMode as string
+  status            String?  // ItemStatus as string
+  error             String?
+  imageAttachment   String?  @map("image_attachment") // Base64 or URL
+  
+  // JSON fields for complex data
+  toolCalls         Json?    @map("tool_calls")     // Record<string, ToolCall>
+  toolResults       Json?    @map("tool_results")   // Record<string, ToolResult>
+  steps             Json?                            // Record<string, Step>
+  answer            Json?                            // Answer object
+  metadata          Json?                            // Record<string, any>
+  sources           Json?                            // Source[]
+  suggestions       String[]                         // Array of suggestion strings
+  object            Json?                            // Record<string, any>
+  
+  // Relations
+  thread            TEST_Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  parent            TEST_ThreadItem? @relation("ThreadItemHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children          TEST_ThreadItem[] @relation("ThreadItemHierarchy")
+  
+  // Indexes for performance
+  @@index([threadId, createdAt])
+  @@index([parentId])
+  @@index([status])
+  @@map("TEST_thread_items")
+}
+
+model TEST_User {
+  id        String   @id
+  email     String?  @unique
+  name      String?
+  role      TEST_Role @default(USER)
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  threads   TEST_Thread[]
+  usageCounts TEST_UsageCount[]
+  feedbacks TEST_Feedback[]
+
+  @@map("TEST_users")
+}
+
+enum TEST_Role {
+  USER
+  LAWYER
+  REALTOR
+  ADMIN
+}
+
+model TEST_UsageCount {
+  userId String @map("user_id")
+  feature String
+  year    String
+  month   String  // 01–12
+  count   Int  @default(0)
+  
+  // Relations
+  user    TEST_User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, feature, year, month])
+  @@map("TEST_usage_counts")
+}
+
+enum TEST_Domain {
+  LEGAL
+  CIVIL_ENGINEERING
+  REAL_ESTATE
+}
+
+enum TEST_CertifiedStatus {
+  PENDING
+  CERTIFIED
+  NOT_CERTIFIED
+}
+
+model TEST_Feedback {
+  id String @id @default(uuid())
+  userId String @map("user_id")
   feedback String
   metadata Json?
-  createdAt DateTime @default(now())
-} 
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  user TEST_User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("TEST_feedbacks")
+}
+
+// =============================================================================
+// ENUMS FOR THREAD ITEMS
+// =============================================================================
+
+enum TEST_ItemStatus {
+  QUEUED
+  PENDING
+  COMPLETED
+  ERROR
+  ABORTED
+  HUMAN_REVIEW
+}
+
+enum TEST_ChatMode {
+  Pro
+  Deep
+  O4_Mini
+  GPT_4_1
+  GPT_4_1_Mini
+  GPT_4_1_Nano
+  GPT_4o_Mini
+  LLAMA_4_SCOUT
+  GEMINI_2_FLASH
+  DEEPSEEK_R1
+  CLAUDE_3_5_SONNET
+  CLAUDE_3_7_SONNET
+}

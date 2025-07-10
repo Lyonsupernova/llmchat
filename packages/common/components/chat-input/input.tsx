@@ -1,5 +1,5 @@
 'use client';
-import { useAuth } from '@clerk/nextjs';
+import { useAuth, useUser } from '@clerk/nextjs';
 import {
     ImageAttachment,
     ImageDropzoneRoot,
@@ -17,7 +17,7 @@ import { useAgentStream } from '../../hooks/agent-provider';
 import { useChatEditor } from '../../hooks/use-editor';
 import { useChatStore } from '../../store';
 import { ExamplePrompts } from '../exmaple-prompts';
-import { ChatModeButton, GeneratingStatus, SendStopButton, WebSearchButton } from './chat-actions';
+import { GeneratingStatus, SendStopButton, WebSearchButton, DomainButton } from './chat-actions';
 import { ChatEditor } from './chat-editor';
 import { ImageUpload } from './image-upload';
 
@@ -64,6 +64,7 @@ export const ChatInput = ({
     const { dropzonProps, handleImageUpload } = useImageAttachment();
     const { push } = useRouter();
     const chatMode = useChatStore(state => state.chatMode);
+
     const sendMessage = async () => {
         if (
             !isSignedIn &&
@@ -81,11 +82,13 @@ export const ChatInput = ({
 
         if (!threadId) {
             const optimisticId = uuidv4();
+            console.log('creating new thread in input.tsx', optimisticId);
             push(`/chat/${optimisticId}`);
-            createThread(optimisticId, {
+            const newThread = await createThread(optimisticId, {
                 title: editor?.getText(),
             });
-            threadId = optimisticId;
+            threadId = newThread.id; // Use the real thread ID from the API response
+            console.log('finish creating new thread in input.tsx', threadId);
         }
 
         // First submit the message
@@ -94,7 +97,7 @@ export const ChatInput = ({
         imageAttachment?.base64 && formData.append('imageAttachment', imageAttachment?.base64);
         const threadItems = currentThreadId ? await getThreadItems(currentThreadId.toString()) : [];
 
-        console.log('threadItems', threadItems);
+        console.log('start handleSubmit in input.tsx');
 
         handleSubmit({
             formData,
@@ -104,6 +107,8 @@ export const ChatInput = ({
             ),
             useWebSearch,
         });
+
+        console.log('finish handleSubmit in input.tsx');
         window.localStorage.removeItem('draft-message');
         editor.commands.clearContent();
         clearImageAttachment();
@@ -157,7 +162,7 @@ export const ChatInput = ({
                                             <GeneratingStatus />
                                         ) : (
                                             <Flex gap="xs" items="center" className="shrink-0">
-                                                <ChatModeButton />
+                                                <DomainButton />
                                                 {/* <AttachmentButton /> */}
                                                 <WebSearchButton />
                                                 {/* <ToolsMenu /> */}
@@ -249,6 +254,31 @@ export const ChatInput = ({
 
                     {renderChatBottom()}
                     {!currentThreadId && showGreeting && <ExamplePrompts />}
+                    {!currentThreadId && showGreeting && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ duration: 0.5, delay: 0.2 }}
+                            className="flex w-full justify-center px-6"
+                        >
+                            <p className="text-center text-xs text-muted-foreground/60 max-w-lg">
+                                AI can make mistakes, please always consult an expert. Read our{' '}
+                                <a 
+                                    href="/terms" 
+                                    className="text-muted-foreground/80 underline hover:text-muted-foreground transition-colors"
+                                >
+                                    terms
+                                </a>{' '}
+                                and{' '}
+                                <a 
+                                    href="/privacy" 
+                                    className="text-muted-foreground/80 underline hover:text-muted-foreground transition-colors"
+                                >
+                                    privacy policy
+                                </a>
+                            </p>
+                        </motion.div>
+                    )}
 
                     {/* <ChatFooter /> */}
                 </Flex>
@@ -263,18 +293,25 @@ type AnimatedTitlesProps = {
 
 const AnimatedTitles = ({ titles = [] }: AnimatedTitlesProps) => {
     const [greeting, setGreeting] = React.useState<string>('');
+    const { user } = useUser();
 
     React.useEffect(() => {
         const getTimeBasedGreeting = () => {
             const hour = new Date().getHours();
-
-            if (hour >= 5 && hour < 12) {
-                return 'Good morning';
-            } else if (hour >= 12 && hour < 18) {
-                return 'Good afternoon';
-            } else {
-                return 'Good evening';
+            const baseGreeting = hour >= 5 && hour < 12 
+                ? 'Good morning' 
+                : hour >= 12 && hour < 18 
+                ? 'Good afternoon' 
+                : 'Good evening';
+            
+            // Add user's name if authenticated
+            if (user?.firstName) {
+                return `${baseGreeting}, ${user.firstName}`;
+            } else if (user?.fullName) {
+                return `${baseGreeting}, ${user.fullName}`;
             }
+            
+            return baseGreeting;
         };
 
         setGreeting(getTimeBasedGreeting());
@@ -288,7 +325,7 @@ const AnimatedTitles = ({ titles = [] }: AnimatedTitlesProps) => {
         }, 60000); // Check every minute
 
         return () => clearInterval(interval);
-    }, [greeting]);
+    }, [greeting, user]);
 
     return (
         <Flex

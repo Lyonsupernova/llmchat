@@ -3,59 +3,64 @@
 import { Model, models } from '@repo/ai/models';
 import { ChatMode } from '@repo/shared/config';
 import { MessageGroup, Thread, ThreadItem } from '@repo/shared/types';
-import Dexie, { Table } from 'dexie';
 import { nanoid } from 'nanoid';
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { useAppStore } from './app.store';
+import ThreadApiService from '../services/thread-api.service';
 
-class ThreadDatabase extends Dexie {
-    threads!: Table<Thread>;
-    threadItems!: Table<ThreadItem>;
-
-    constructor() {
-        super('ThreadDatabase');
-        this.version(1).stores({
-            threads: 'id, createdAt, pinned, pinnedAt',
-            threadItems: 'id, threadId, parentId, createdAt',
-        });
-    }
-}
-
-let db: ThreadDatabase;
 let CONFIG_KEY = 'chat-config';
-if (typeof window !== 'undefined') {
-    db = new ThreadDatabase();
-    CONFIG_KEY = 'chat-config';
-}
 
 const loadInitialData = async () => {
-    const threads = await db.threads.toArray();
-    const configStr = localStorage.getItem(CONFIG_KEY);
-    const config = configStr
-        ? JSON.parse(configStr)
-        : {
-              customInstructions: undefined,
-              model: models[0].id,
-              useWebSearch: false,
-              showSuggestions: true,
-              chatMode: ChatMode.GEMINI_2_FLASH,
-          };
-    const chatMode = config.chatMode || ChatMode.GEMINI_2_FLASH;
-    const useWebSearch = typeof config.useWebSearch === 'boolean' ? config.useWebSearch : false;
-    const customInstructions = config.customInstructions || '';
+    try {
+        const threads = await ThreadApiService.getThreads({
+            orderBy: 'createdAt',
+            orderDirection: 'desc',
+        });
+        
+        const configStr = localStorage.getItem(CONFIG_KEY);
+        const config = configStr
+            ? JSON.parse(configStr)
+            : {
+                  customInstructions: undefined,
+                  model: models[0].id,
+                  useWebSearch: false,
+                  showSuggestions: true,
+                  chatMode: ChatMode.GPT_4_1,
+              };
+        const chatMode = config.chatMode || ChatMode.GPT_4_1;
+        const useWebSearch = typeof config.useWebSearch === 'boolean' ? config.useWebSearch : false;
+        const customInstructions = config.customInstructions || '';
 
-    const initialThreads = threads.length ? threads : [];
-
-    return {
-        threads: initialThreads.sort((a, b) => b.createdAt?.getTime() - a.createdAt?.getTime()),
-        currentThreadId: config.currentThreadId || initialThreads[0]?.id,
-        config,
-        useWebSearch,
-        chatMode,
-        customInstructions,
-        showSuggestions: config.showSuggestions ?? true,
-    };
+        return {
+            threads,
+            currentThreadId: config.currentThreadId || threads[0]?.id,
+            config,
+            useWebSearch,
+            chatMode,
+            customInstructions,
+            showSuggestions: config.showSuggestions ?? true,
+        };
+    } catch (error) {
+        console.error('Failed to load initial data:', error);
+        // Return default values if API fails
+        const config = {
+            customInstructions: '',
+            model: models[0].id,
+            useWebSearch: false,
+            showSuggestions: true,
+            chatMode: ChatMode.GPT_4_1,
+        };
+        return {
+            threads: [],
+            currentThreadId: null,
+            config,
+            useWebSearch: false,
+            chatMode: ChatMode.GPT_4_1,
+            customInstructions: '',
+            showSuggestions: true,
+        };
+    }
 };
 
 type State = {
@@ -66,6 +71,7 @@ type State = {
     showSuggestions: boolean;
     editor: any;
     chatMode: ChatMode;
+    domain: string;
     context: string;
     imageAttachment: { base64?: string; file?: File };
     abortController: AbortController | null;
@@ -79,6 +85,10 @@ type State = {
     isLoadingThreads: boolean;
     isLoadingThreadItems: boolean;
     currentSources: string[];
+    // Map real database IDs to optimistic IDs using plain object
+    optimisticIdMap: Record<string, string>;
+    // Map real thread item database IDs to optimistic thread item IDs  
+    optimisticThreadItemIdMap: Record<string, string>;
     creditLimit: {
         remaining: number | undefined;
         maxLimit: number | undefined;
@@ -92,6 +102,7 @@ type Actions = {
     setModel: (model: Model) => void;
     setEditor: (editor: any) => void;
     setContext: (context: string) => void;
+    setDomain: (domain: string) => void;
     fetchRemainingCredits: () => Promise<void>;
     setImageAttachment: (imageAttachment: { base64?: string; file?: File }) => void;
     clearImageAttachment: () => void;
@@ -122,35 +133,51 @@ type Actions = {
     setCurrentSources: (sources: string[]) => void;
     setUseWebSearch: (useWebSearch: boolean) => void;
     setShowSuggestions: (showSuggestions: boolean) => void;
+    // Optimistic ID mapping actions
+    setOptimisticIdMapping: (realId: string, optimisticId: string) => void;
+    getOptimisticIdFromReal: (realId: string) => string | null;
+    getRealIdFromOptimistic: (optimisticId: string) => string | null;
+    clearOptimisticIdMapping: (realId: string) => void;
+    // Thread item optimistic ID mapping actions
+    setOptimisticThreadItemIdMapping: (realThreadItemId: string, optimisticThreadItemId: string) => void;
+    getOptimisticThreadItemIdFromReal: (realThreadItemId: string) => string | null;
+    getRealThreadItemIdFromOptimistic: (optimisticThreadItemId: string) => string | null;
+    clearOptimisticThreadItemIdMapping: (realThreadItemId: string) => void;
+    isThreadExpertCertified: (threadId: string) => boolean;
+    getExpertCertificationStatus: (threadId: string) => 'expert-certified' | 'not-certified' | 'none';
+    updateThreadCertifiedStatus: (threadId: string, certifiedStatus: 'PENDING' | 'CERTIFIED' | 'NOT_CERTIFIED') => Promise<void>;
 };
 
-// Add these utility functions at the top level
-const debounce = <T extends (...args: any[]) => any>(
-    fn: T,
-    delay: number
-): ((...args: Parameters<T>) => void) => {
-    let timeoutId: NodeJS.Timeout;
+// Utility function to debounce function calls
+function debounce<T extends (...args: any[]) => any>(
+    func: T,
+    wait: number
+): (...args: Parameters<T>) => void {
+    let timeout: NodeJS.Timeout | null = null;
     return (...args: Parameters<T>) => {
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => fn(...args), delay);
+        if (timeout) {
+            clearTimeout(timeout);
+        }
+        timeout = setTimeout(() => func(...args), wait);
     };
-};
+}
 
-const throttle = <T extends (...args: any[]) => any>(
-    fn: T,
+// Utility function to throttle function calls
+function throttle<T extends (...args: any[]) => any>(
+    func: T,
     limit: number
-): ((...args: Parameters<T>) => void) => {
+): (...args: Parameters<T>) => void {
     let inThrottle = false;
     let lastArgs: Parameters<T> | null = null;
 
     return (...args: Parameters<T>) => {
         if (!inThrottle) {
-            fn(...args);
+            func(...args);
             inThrottle = true;
             setTimeout(() => {
                 inThrottle = false;
                 if (lastArgs) {
-                    fn(...lastArgs);
+                    func(...lastArgs);
                     lastArgs = null;
                 }
             }, limit);
@@ -158,279 +185,7 @@ const throttle = <T extends (...args: any[]) => any>(
             lastArgs = args;
         }
     };
-};
-
-// Add batch update functionality
-const DB_UPDATE_THROTTLE = 1000; // 1 second between updates for the same item
-const BATCH_PROCESS_INTERVAL = 500; // Process batches every 500ms
-
-// Track the last time each item was updated
-const lastItemUpdateTime: Record<string, number> = {};
-
-// Enhanced batch update queue
-type BatchUpdateQueue = {
-    items: Map<string, ThreadItem>; // Use Map to ensure uniqueness by ID
-    timeoutId: NodeJS.Timeout | null;
-};
-
-const batchUpdateQueue: BatchUpdateQueue = {
-    items: new Map(),
-    timeoutId: null,
-};
-
-// Process all queued updates as a batch
-const processBatchUpdate = async () => {
-    if (batchUpdateQueue.items.size === 0) return;
-
-    const itemsToUpdate = Array.from(batchUpdateQueue.items.values());
-    batchUpdateQueue.items.clear();
-
-    try {
-        await db.threadItems.bulkPut(itemsToUpdate);
-        // Update last update times for all processed items
-        itemsToUpdate.forEach(item => {
-            lastItemUpdateTime[item.id] = Date.now();
-        });
-    } catch (error) {
-        console.error('Failed to batch update thread items:', error);
-        // If bulk update fails, try individual updates to salvage what we can
-        for (const item of itemsToUpdate) {
-            try {
-                await db.threadItems.put(item);
-                lastItemUpdateTime[item.id] = Date.now();
-            } catch (innerError) {
-                console.error(`Failed to update item ${item.id}:`, innerError);
-            }
-        }
-    }
-};
-
-// Queue an item for batch update
-const queueThreadItemForUpdate = (threadItem: ThreadItem) => {
-    // Always update the in-memory Map with the latest version
-    batchUpdateQueue.items.set(threadItem.id, threadItem);
-
-    // Schedule batch processing if not already scheduled
-    if (!batchUpdateQueue.timeoutId) {
-        batchUpdateQueue.timeoutId = setTimeout(() => {
-            processBatchUpdate();
-            batchUpdateQueue.timeoutId = null;
-        }, BATCH_PROCESS_INTERVAL);
-    }
-};
-
-// Add this near the top of your file after other imports
-let dbWorker: SharedWorker | null = null;
-
-// Extend Window interface to include notifyTabSync
-declare global {
-    interface Window {
-        notifyTabSync?: (type: string, data: any) => void;
-    }
 }
-
-// Function to initialize the shared worker
-const initializeWorker = () => {
-    if (typeof window === 'undefined') return;
-
-    try {
-        // Create a shared worker
-        dbWorker = new SharedWorker(new URL('./db-sync.worker.ts', import.meta?.url), {
-            type: 'module',
-        });
-
-        // Set up message handler
-        dbWorker.port.onmessage = async event => {
-            const message = event.data;
-
-            if (!message || !message.type) return;
-
-            // Handle different message types
-            switch (message.type) {
-                case 'connected':
-                    console.log('Connected to SharedWorker');
-                    break;
-
-                case 'thread-update':
-                    // Refresh threads list
-                    const threads = await db.threads.toArray();
-                    useChatStore.setState({
-                        threads: threads.sort(
-                            (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
-                        ),
-                    });
-                    break;
-
-                case 'thread-item-update':
-                    // Refresh thread items if we're on the same thread
-                    const currentThreadId = useChatStore.getState().currentThreadId;
-                    if (message.data?.threadId === currentThreadId) {
-                        await useChatStore.getState().loadThreadItems(message.data.threadId);
-                    }
-                    break;
-
-                case 'thread-delete':
-                    // Handle thread deletion
-                    useChatStore.setState(state => {
-                        const newState = { ...state };
-                        newState.threads = state.threads.filter(
-                            t => t.id !== message.data.threadId
-                        );
-
-                        // Update current thread if the deleted one was active
-                        if (state.currentThreadId === message.data.threadId) {
-                            newState.currentThreadId = newState.threads[0]?.id || null;
-                            newState.currentThread = newState.threads[0] || null;
-                        }
-
-                        return newState;
-                    });
-                    break;
-
-                case 'thread-item-delete':
-                    // Handle thread item deletion
-                    if (message.data?.threadId === useChatStore.getState().currentThreadId) {
-                        useChatStore.setState(state => ({
-                            threadItems: state.threadItems.filter(
-                                item => item.id !== message.data.id
-                            ),
-                        }));
-                    }
-                    break;
-            }
-        };
-
-        // Start the connection
-        dbWorker.port.start();
-
-        // Handle worker errors
-        dbWorker.onerror = err => {
-            console.error('SharedWorker error:', err);
-        };
-    } catch (error) {
-        console.error('Failed to initialize SharedWorker:', error);
-        // Fallback to localStorage method if SharedWorker isn't supported
-        initializeTabSync();
-    }
-};
-
-// Function to initialize tab synchronization using localStorage
-const initializeTabSync = () => {
-    if (typeof window === 'undefined') return;
-
-    const SYNC_EVENT_KEY = 'chat-store-sync-event';
-    const SYNC_DATA_KEY = 'chat-store-sync-data';
-
-    // Listen for storage events from other tabs
-    window.addEventListener('storage', event => {
-        if (event.key !== SYNC_EVENT_KEY) return;
-
-        try {
-            const syncData = JSON.parse(localStorage.getItem(SYNC_DATA_KEY) || '{}');
-
-            if (!syncData || !syncData.type) return;
-
-            switch (syncData.type) {
-                case 'thread-update':
-                    // Refresh threads list
-                    db.threads.toArray().then(threads => {
-                        useChatStore.setState({
-                            threads: threads.sort(
-                                (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
-                            ),
-                        });
-                    });
-                    break;
-
-                case 'thread-item-update':
-                    // Refresh thread items if we're on the same thread
-                    const currentThreadId = useChatStore.getState().currentThreadId;
-                    if (syncData.data?.threadId === currentThreadId) {
-                        useChatStore.getState().loadThreadItems(syncData.data.threadId);
-                    }
-                    break;
-
-                case 'thread-delete':
-                    // Handle thread deletion
-                    useChatStore.setState(state => {
-                        const newState = { ...state };
-                        newState.threads = state.threads.filter(
-                            t => t.id !== syncData.data.threadId
-                        );
-
-                        // Update current thread if the deleted one was active
-                        if (state.currentThreadId === syncData.data.threadId) {
-                            newState.currentThreadId = newState.threads[0]?.id || null;
-                            newState.currentThread = newState.threads[0] || null;
-                        }
-
-                        return newState;
-                    });
-                    break;
-
-                case 'thread-item-delete':
-                    // Handle thread item deletion
-                    if (syncData.data?.threadId === useChatStore.getState().currentThreadId) {
-                        useChatStore.setState(state => ({
-                            threadItems: state.threadItems.filter(
-                                item => item.id !== syncData.data.id
-                            ),
-                        }));
-                    }
-                    break;
-            }
-        } catch (error) {
-            console.error('Error processing sync data:', error);
-        }
-    });
-
-    // Function to notify other tabs about a change
-    const notifyOtherTabs = (type: string, data: any) => {
-        try {
-            // Store the sync data
-            localStorage.setItem(
-                SYNC_DATA_KEY,
-                JSON.stringify({
-                    type,
-                    data,
-                    timestamp: Date.now(),
-                })
-            );
-
-            // Trigger the storage event in other tabs
-            localStorage.setItem(SYNC_EVENT_KEY, Date.now().toString());
-        } catch (error) {
-            console.error('Error notifying other tabs:', error);
-        }
-    };
-
-    // Replace the worker notification with localStorage notification
-    window.notifyTabSync = notifyOtherTabs;
-};
-
-// Function to notify the worker about a change
-const notifyWorker = (type: string, data: any) => {
-    if (!dbWorker) {
-        // Use localStorage fallback if worker isn't available
-        if (typeof window !== 'undefined' && window.notifyTabSync) {
-            window.notifyTabSync(type, data);
-        }
-        return;
-    }
-
-    try {
-        dbWorker.port.postMessage({
-            type,
-            data,
-            timestamp: Date.now(),
-        });
-    } catch (error) {
-        console.error('Error notifying worker:', error);
-    }
-};
-
-// Create a debounced version of the notification function
-const debouncedNotify = debounce(notifyWorker, 300);
 
 export const useChatStore = create(
     immer<State & Actions>((set, get) => ({
@@ -439,7 +194,7 @@ export const useChatStore = create(
         editor: undefined,
         context: '',
         threads: [],
-        chatMode: ChatMode.GEMINI_2_FLASH,
+        chatMode: ChatMode.GPT_4_1,
         threadItems: [],
         useWebSearch: false,
         customInstructions: '',
@@ -453,6 +208,8 @@ export const useChatStore = create(
         isLoadingThreads: false,
         isLoadingThreadItems: false,
         currentSources: [],
+        optimisticIdMap: {},
+        optimisticThreadItemIdMap: {},
         creditLimit: {
             remaining: undefined,
             maxLimit: undefined,
@@ -461,6 +218,7 @@ export const useChatStore = create(
             isFetched: false,
         },
         showSuggestions: true,
+        domain: 'legal',
 
         setCustomInstructions: (customInstructions: string) => {
             const existingConfig = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}');
@@ -492,7 +250,8 @@ export const useChatStore = create(
         },
 
         setShowSuggestions: (showSuggestions: boolean) => {
-            localStorage.setItem(CONFIG_KEY, JSON.stringify({ showSuggestions }));
+            const existingConfig = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}');
+            localStorage.setItem(CONFIG_KEY, JSON.stringify({ ...existingConfig, showSuggestions }));
             set(state => {
                 state.showSuggestions = showSuggestions;
             });
@@ -507,32 +266,51 @@ export const useChatStore = create(
         },
 
         setChatMode: (chatMode: ChatMode) => {
-            localStorage.setItem(CONFIG_KEY, JSON.stringify({ chatMode }));
+            const existingConfig = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}');
+            localStorage.setItem(CONFIG_KEY, JSON.stringify({ ...existingConfig, chatMode }));
             set(state => {
                 state.chatMode = chatMode;
             });
         },
 
         pinThread: async (threadId: string) => {
-            await db.threads.update(threadId, { pinned: true, pinnedAt: new Date() });
-            set(state => {
-                state.threads = state.threads.map(thread =>
-                    thread.id === threadId
-                        ? { ...thread, pinned: true, pinnedAt: new Date() }
-                        : thread
-                );
-            });
+            try {
+                // Check if this is an optimistic ID and map it to real ID
+                const realId = get().getRealIdFromOptimistic(threadId) || threadId;
+                
+                const updatedThread = await ThreadApiService.toggleThreadPin(realId);
+                set(state => {
+                    const index = state.threads.findIndex(t => t.id === realId || t.id === threadId);
+                    if (index !== -1) {
+                        state.threads[index] = updatedThread;
+                    }
+                    if (state.currentThreadId === threadId || state.currentThreadId === realId) {
+                        state.currentThread = updatedThread;
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to pin thread:', error);
+            }
         },
 
         unpinThread: async (threadId: string) => {
-            await db.threads.update(threadId, { pinned: false, pinnedAt: new Date() });
-            set(state => {
-                state.threads = state.threads.map(thread =>
-                    thread.id === threadId
-                        ? { ...thread, pinned: false, pinnedAt: new Date() }
-                        : thread
-                );
-            });
+            try {
+                // Check if this is an optimistic ID and map it to real ID
+                const realId = get().getRealIdFromOptimistic(threadId) || threadId;
+                
+                const updatedThread = await ThreadApiService.toggleThreadPin(realId);
+                set(state => {
+                    const index = state.threads.findIndex(t => t.id === realId || t.id === threadId);
+                    if (index !== -1) {
+                        state.threads[index] = updatedThread;
+                    }
+                    if (state.currentThreadId === threadId || state.currentThreadId === realId) {
+                        state.currentThread = updatedThread;
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to unpin thread:', error);
+            }
         },
 
         fetchRemainingCredits: async () => {
@@ -552,39 +330,50 @@ export const useChatStore = create(
             }
         },
 
-        getPinnedThreads: async () => {
-            const threads = await db.threads.where('pinned').equals('true').toArray();
-            return threads.sort((a, b) => b.pinnedAt.getTime() - a.pinnedAt.getTime());
-        },
-
         removeFollowupThreadItems: async (threadItemId: string) => {
-            const threadItem = await db.threadItems.get(threadItemId);
-            if (!threadItem) return;
-            const threadItems = await db.threadItems
-                .where('createdAt')
-                .above(threadItem.createdAt)
-                .and(item => item.threadId === threadItem.threadId)
-                .toArray();
-            for (const threadItem of threadItems) {
-                await db.threadItems.delete(threadItem.id);
-            }
-            set(state => {
-                state.threadItems = state.threadItems.filter(
-                    t => t.createdAt <= threadItem.createdAt || t.threadId !== threadItem.threadId
-                );
-            });
+            try {
+                const threadItem = get().threadItems.find(item => item.id === threadItemId);
+                if (!threadItem) return;
 
-            // Notify other tabs
-            debouncedNotify('thread-item-delete', {
-                threadId: threadItem.threadId,
-                id: threadItemId,
-                isFollowupRemoval: true,
-            });
+                const threadItemCreatedAt = threadItem.createdAt instanceof Date ? threadItem.createdAt : new Date(threadItem.createdAt);
+
+                const threadItems = get().threadItems.filter(
+                    item => {
+                        const itemCreatedAt = item.createdAt instanceof Date ? item.createdAt : new Date(item.createdAt);
+                        return item.threadId === threadItem.threadId && 
+                               itemCreatedAt > threadItemCreatedAt;
+                    }
+                );
+
+                for (const item of threadItems) {
+                    // Check if this is an optimistic thread item ID and map it to real ID
+                    const realThreadItemId = get().getRealThreadItemIdFromOptimistic(item.id) || item.id;
+                    await ThreadApiService.deleteThreadItem(item.threadId, realThreadItemId);
+                }
+
+                set(state => {
+                    state.threadItems = state.threadItems.filter(
+                        t => {
+                            const tCreatedAt = t.createdAt instanceof Date ? t.createdAt : new Date(t.createdAt);
+                            return tCreatedAt <= threadItemCreatedAt || t.threadId !== threadItem.threadId;
+                        }
+                    );
+                });
+            } catch (error) {
+                console.error('Failed to remove follow-up thread items:', error);
+            }
         },
 
         getThreadItems: async (threadId: string) => {
-            const threadItems = await db.threadItems.where('threadId').equals(threadId).toArray();
-            return threadItems;
+            try {
+                // Check if this is an optimistic ID and map it to real ID
+                const realId = get().getRealIdFromOptimistic(threadId) || threadId;
+                
+                return await ThreadApiService.getThreadItems(realId);
+            } catch (error) {
+                console.error('Failed to get thread items:', error);
+                return [];
+            }
         },
 
         setCurrentSources: (sources: string[]) => {
@@ -628,109 +417,234 @@ export const useChatStore = create(
             }),
 
         loadThreadItems: async (threadId: string) => {
-            const threadItems = await db.threadItems.where('threadId').equals(threadId).toArray();
-            set(state => {
-                state.threadItems = threadItems;
-            });
+            try {
+                set(state => {
+                    state.isLoadingThreadItems = true;
+                });
+
+                // Check if this is an optimistic ID and map it to real ID
+                const realId = get().getRealIdFromOptimistic(threadId) || threadId;
+                
+                const threadItems = await ThreadApiService.getThreadItems(realId);
+                set(state => {
+                    state.threadItems = threadItems;
+                    state.isLoadingThreadItems = false;
+                });
+            } catch (error) {
+                console.error('Failed to load thread items:', error);
+                set(state => {
+                    state.isLoadingThreadItems = false;
+                });
+            }
         },
 
         clearAllThreads: async () => {
-            await db.threads.clear();
-            await db.threadItems.clear();
-            set(state => {
-                state.threads = [];
-                state.threadItems = [];
-            });
+            try {
+                await ThreadApiService.clearAllThreads();
+                set(state => {
+                    state.threads = [];
+                    state.threadItems = [];
+                    state.currentThreadId = null;
+                    state.currentThread = null;
+                });
+            } catch (error) {
+                console.error('Failed to clear all threads:', error);
+            }
         },
 
         getThread: async (threadId: string) => {
-            const thread = await db.threads.get(threadId);
-            return thread || null;
+            try {
+                console.log('chat.store.ts - getThread - threadId', threadId);
+                
+                // Check if this is an optimistic ID and map it to real ID
+                const realId = get().getRealIdFromOptimistic(threadId) || threadId;
+                console.log('chat.store.ts - getThread - realId', realId);
+                
+                // First check if thread exists in local state
+                const localThread = get().threads.find(t => t.id === realId || t.id === threadId);
+                if (localThread) {
+                    console.log('chat.store.ts - getThread - found in local state', localThread);
+                    return localThread;
+                }
+                
+                // If not found locally, fetch from API
+                const thread = await ThreadApiService.getThread(realId);
+                console.log('chat.store.ts - getThread - fetched from API', thread);
+                
+                // Add to local state
+                set(state => {
+                    const existingIndex = state.threads.findIndex(t => t.id === thread.id);
+                    if (existingIndex === -1) {
+                        state.threads.push(thread);
+                    }
+                });
+                
+                return thread;
+            } catch (error) {
+                console.error('Failed to get thread:', error);
+                return null;
+            }
         },
 
         createThread: async (optimisticId: string, thread?: Pick<Thread, 'title'>) => {
-            const threadId = optimisticId || nanoid();
-            const newThread = {
-                id: threadId,
-                title: thread?.title || 'New Thread',
-                updatedAt: new Date(),
-                createdAt: new Date(),
+            // Create optimistic thread for immediate UI feedback
+            console.log('chat.store.ts - createThread - optimisticId', optimisticId, 'from domain', get().domain);
+            const optimisticThread: Thread = {
+                id: optimisticId,
+                title: thread?.title || 'New Chat',
                 pinned: false,
                 pinnedAt: new Date(),
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                domain: get().domain || 'legal',
             };
-            db.threads.add(newThread);
+            
+            // Add optimistic thread to state
             set(state => {
-                state.threads.push(newThread);
-                state.currentThreadId = newThread.id;
-                state.currentThread = newThread;
+                state.threads.unshift(optimisticThread);
+                state.currentThreadId = optimisticId;
+                state.currentThread = optimisticThread;
             });
-
-            // Notify other tabs through the worker
-            debouncedNotify('thread-update', { threadId });
-
-            return newThread;
+            
+            try {
+                // Create thread in database
+                const realThread = await ThreadApiService.createThread({
+                    title: thread?.title || 'New Chat',
+                    domain: get().domain || 'legal',
+                    pinned: false,
+                });
+                
+                // Store the mapping: realId -> optimisticId
+                get().setOptimisticIdMapping(realThread.id, optimisticId);
+                
+                // Update the thread in state with real data
+                set(state => {
+                    const threadIndex = state.threads.findIndex(t => t.id === optimisticId);
+                    if (threadIndex !== -1) {
+                        state.threads[threadIndex] = realThread;
+                    }
+                    state.currentThreadId = realThread.id;
+                    state.currentThread = realThread;
+                });
+                
+                // Update URL with real ID
+                if (typeof window !== 'undefined') {
+                    const currentPath = window.location.pathname;
+                    if (currentPath.includes(optimisticId)) {
+                        const newPath = currentPath.replace(optimisticId, realThread.id);
+                        window.history.replaceState({}, '', newPath);
+                    }
+                }
+                
+                return realThread;
+            } catch (error) {
+                console.error('Failed to create thread:', error);
+                
+                // Remove optimistic thread on error
+                set(state => {
+                    state.threads = state.threads.filter(t => t.id !== optimisticId);
+                    state.currentThreadId = null;
+                });
+                
+                // Return fallback thread
+                const fallbackThread: Thread = {
+                    id: optimisticId,
+                    title: thread?.title || 'New Chat',
+                    pinned: false,
+                    pinnedAt: new Date(),
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    domain: get().domain || 'legal',
+                };
+                
+                return fallbackThread;
+            }
         },
 
         setModel: async (model: Model) => {
-            localStorage.setItem(CONFIG_KEY, JSON.stringify({ model: model.id }));
+            const existingConfig = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}');
+            localStorage.setItem(CONFIG_KEY, JSON.stringify({ ...existingConfig, model: model.id }));
             set(state => {
                 state.model = model;
             });
         },
 
         updateThread: async thread => {
-            const existingThread = get().threads.find(t => t.id === thread.id);
-            if (!existingThread) return;
-
-            const updatedThread: Thread = {
-                ...existingThread,
-                ...thread,
-                updatedAt: new Date(),
-            };
-
-            set(state => {
-                const index = state.threads.findIndex((t: Thread) => t.id === thread.id);
-                if (index !== -1) {
-                    state.threads[index] = updatedThread;
-                }
-                if (state.currentThreadId === thread.id) {
-                    state.currentThread = updatedThread;
-                }
-            });
-
             try {
-                await db.threads.put(updatedThread);
-
-                // Notify other tabs about the update
-                debouncedNotify('thread-update', { threadId: thread.id });
+                console.log('chat.store.ts - updateThread - thread', thread);
+                
+                // Check if this is an optimistic ID and map it to real ID
+                const realId = get().getRealIdFromOptimistic(thread.id) || thread.id;
+                console.log('chat.store.ts - updateThread - realId', realId);
+                
+                const updatedThread = await ThreadApiService.updateThread(realId, {
+                    title: thread.title,
+                });
+                console.log('chat.store.ts - updateThread - updatedThread', updatedThread);
+                set(state => {
+                    const index = state.threads.findIndex((t: Thread) => t.id === realId || t.id === thread.id);
+                    if (index !== -1) {
+                        state.threads[index] = updatedThread;
+                    }
+                    if (state.currentThreadId === thread.id || state.currentThreadId === realId) {
+                        state.currentThread = updatedThread;
+                    }
+                });
             } catch (error) {
-                console.error('Failed to update thread in database:', error);
+                console.error('Failed to update thread:', error);
             }
         },
 
         createThreadItem: async threadItem => {
-            const threadId = get().currentThreadId;
-            if (!threadId) return;
+            const currentThreadId = get().currentThreadId;
+            if (!currentThreadId) return;
+
+            // Get real thread ID (in case currentThreadId is optimistic)
+            const realThreadId = get().getRealIdFromOptimistic(currentThreadId) || currentThreadId;
+
             try {
-                db.threadItems.put(threadItem);
-                set(state => {
-                    if (state.threadItems.find(t => t.id === threadItem.id)) {
-                        state.threadItems = state.threadItems.map(t =>
-                            t.id === threadItem.id ? threadItem : t
-                        );
-                    } else {
-                        state.threadItems.push({ ...threadItem, threadId });
-                    }
+                const newThreadItem = await ThreadApiService.createThreadItem(realThreadId, {
+                    query: threadItem.query,
+                    parentId: threadItem.parentId,
+                    mode: threadItem.mode,
+                    status: threadItem.status,
+                    error: threadItem.error,
+                    imageAttachment: threadItem.imageAttachment,
+                    toolCalls: threadItem.toolCalls,
+                    toolResults: threadItem.toolResults,
+                    steps: threadItem.steps,
+                    answer: threadItem.answer,
+                    metadata: threadItem.metadata,
+                    sources: threadItem.sources,
+                    suggestions: threadItem.suggestions,
+                    object: threadItem.object,
                 });
 
-                // Notify other tabs
-                debouncedNotify('thread-item-update', {
-                    threadId,
-                    id: threadItem.id,
+                // Store the mapping: realThreadItemId -> optimisticThreadItemId
+                if (threadItem.id !== newThreadItem.id) {
+                    get().setOptimisticThreadItemIdMapping(newThreadItem.id, threadItem.id);
+                }
+
+                set(state => {
+                    const existingIndex = state.threadItems.findIndex(t => t.id === threadItem.id);
+                    if (existingIndex !== -1) {
+                        // Replace optimistic thread item with real one
+                        state.threadItems[existingIndex] = newThreadItem;
+                    } else {
+                        state.threadItems.push(newThreadItem);
+                    }
                 });
             } catch (error) {
                 console.error('Failed to create thread item:', error);
-                // Handle error appropriately
+                // Add to local state as fallback
+                set(state => {
+                    const existingIndex = state.threadItems.findIndex(t => t.id === threadItem.id);
+                    if (existingIndex !== -1) {
+                        state.threadItems[existingIndex] = threadItem;
+                    } else {
+                        state.threadItems.push({ ...threadItem, threadId: realThreadId });
+                    }
+                });
             }
         },
 
@@ -739,30 +653,53 @@ export const useChatStore = create(
             if (!threadId) return;
 
             try {
-                console.log('updateThreadItem', threadItem);
-
-                // // Fetch the existing item
-                // let existingItem: ThreadItem | undefined;
-                // try {
-                //     db.threadItems.get(threadItem.id);
-                // } catch (error) {
-                //     console.warn(`Couldn't fetch existing item ${threadItem.id}:`, error);
-                // }
-
+                // Check if this is an optimistic thread ID and map it to real ID
+                const realThreadId = get().getRealIdFromOptimistic(threadId) || threadId;
+                
+                // Check if this is an optimistic thread item ID and map it to real ID
+                const realThreadItemId = get().getRealThreadItemIdFromOptimistic(threadItem.id) || threadItem.id;
+                
+                console.log('chat.store.ts - updateThreadItem - threadId', threadId, 'realThreadId', realThreadId, 'threadItemId', threadItem.id, 'realThreadItemId', realThreadItemId, 'threadItem', threadItem);
+                
+                const updatedItem = await ThreadApiService.updateThreadItem(realThreadId, realThreadItemId, {
+                    query: threadItem.query,
+                    status: threadItem.status,
+                    error: threadItem.error,
+                    imageAttachment: threadItem.imageAttachment,
+                    toolCalls: threadItem.toolCalls,
+                    toolResults: threadItem.toolResults,
+                    steps: threadItem.steps,
+                    answer: threadItem.answer,
+                    metadata: threadItem.metadata,
+                    sources: threadItem.sources,
+                    suggestions: threadItem.suggestions,
+                    object: threadItem.object,
+                });
+                console.log('chat.store.ts - updateThreadItem - updatedItem', updatedItem);
+                set(state => {
+                    // Find by optimistic ID or real ID
+                    const index = state.threadItems.findIndex(t => t.id === threadItem.id || t.id === realThreadItemId);
+                    if (index !== -1) {
+                        state.threadItems[index] = updatedItem;
+                    } else {
+                        state.threadItems.push(updatedItem);
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to update thread item:', error);
+                // Update local state as fallback
                 const existingItem = get().threadItems.find(t => t.id === threadItem.id);
-
-                // Create or update the item
+                const realThreadId = get().getRealIdFromOptimistic(threadId) || threadId;
                 const updatedItem = existingItem
-                    ? { ...existingItem, ...threadItem, threadId, updatedAt: new Date() }
+                    ? { ...existingItem, ...threadItem, threadId: realThreadId, updatedAt: new Date() }
                     : ({
                           id: threadItem.id,
-                          threadId,
+                          threadId: realThreadId,
                           createdAt: new Date(),
                           updatedAt: new Date(),
                           ...threadItem,
                       } as ThreadItem);
 
-                // Update UI state immediately
                 set(state => {
                     const index = state.threadItems.findIndex(t => t.id === threadItem.id);
                     if (index !== -1) {
@@ -771,132 +708,106 @@ export const useChatStore = create(
                         state.threadItems.push(updatedItem);
                     }
                 });
-
-                // // Determine if this is a critical update that should bypass throttling
-                // const isCriticalUpdate =
-                //     !existingItem || // New items
-                //     threadItem.status === 'COMPLETED' || // Final updates
-                //     threadItem.status === 'ERROR' || // Error states
-                //     threadItem.status === 'ABORTED' || // Aborted states
-                //     threadItem.error !== undefined; // Any error information
-
-                // // Always persist final updates - this fixes the issue with missing updates at stream completion
-                // if (
-                //     threadItem.persistToDB === true ||
-                //     isCriticalUpdate ||
-                //     timeSinceLastUpdate > DB_UPDATE_THROTTLE
-                // ) {
-                //     // For critical updates or if enough time has passed, queue for immediate update
-                //     queueThreadItemForUpdate(updatedItem);
-
-                queueThreadItemForUpdate(updatedItem);
-
-                // Notify other tabs about the update
-                debouncedNotify('thread-item-update', {
-                    threadId,
-                    id: threadItem.id,
-                });
-
-                // if (isCriticalUpdate) {
-                //     lastItemUpdateTime[threadItem.id] = now;
-                // }
-                // }
-                // Non-critical updates that are too soon after the last update
-                // won't be persisted yet, but will be in the UI state
-            } catch (error) {
-                console.error('Error in updateThreadItem:', error);
-
-                // Safety fallback - try to persist directly in case of errors in the main logic
-                try {
-                    const fallbackItem = {
-                        id: threadItem.id,
-                        threadId,
-                        query: threadItem.query || '',
-                        mode: threadItem.mode || ChatMode.GEMINI_2_FLASH,
-                        createdAt: new Date(),
-                        updatedAt: new Date(),
-                        ...threadItem,
-                        error: threadItem.error || `Something went wrong`,
-                    };
-                    await db.threadItems.put(fallbackItem);
-                } catch (fallbackError) {
-                    console.error(
-                        'Critical: Failed even fallback thread item update:',
-                        fallbackError
-                    );
-                }
             }
         },
 
         switchThread: async (threadId: string) => {
-            const thread = get().threads.find(t => t.id === threadId);
+            // Check if this is an optimistic ID and map it to real ID
+            const realId = get().getRealIdFromOptimistic(threadId) || threadId;
+            
+            const thread = get().threads.find(t => t.id === realId || t.id === threadId);
+            const existingConfig = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}');
             localStorage.setItem(
                 CONFIG_KEY,
                 JSON.stringify({
-                    model: get().model.id,
-                    currentThreadId: threadId,
+                    ...existingConfig,
+                    currentThreadId: realId,
                 })
             );
             set(state => {
-                state.currentThreadId = threadId;
+                state.currentThreadId = realId;
                 state.currentThread = thread || null;
             });
-            get().loadThreadItems(threadId);
+            await get().loadThreadItems(realId);
         },
 
         deleteThreadItem: async threadItemId => {
             const threadId = get().currentThreadId;
             if (!threadId) return;
 
-            await db.threadItems.delete(threadItemId);
-            set(state => {
-                state.threadItems = state.threadItems.filter(
-                    (t: ThreadItem) => t.id !== threadItemId
-                );
-            });
-
-            // Notify other tabs
-            debouncedNotify('thread-item-delete', { id: threadItemId, threadId });
-
-            // Check if there are any thread items left for this thread
-            const remainingItems = await db.threadItems.where('threadId').equals(threadId).count();
-
-            // If no items remain, delete the thread and redirect
-            if (remainingItems === 0) {
-                await db.threads.delete(threadId);
+            try {
+                // Check if this is an optimistic thread ID and map it to real ID
+                const realThreadId = get().getRealIdFromOptimistic(threadId) || threadId;
+                
+                // Check if this is an optimistic thread item ID and map it to real ID
+                const realThreadItemId = get().getRealThreadItemIdFromOptimistic(threadItemId) || threadItemId;
+                
+                await ThreadApiService.deleteThreadItem(realThreadId, realThreadItemId);
+                
                 set(state => {
-                    state.threads = state.threads.filter((t: Thread) => t.id !== threadId);
-                    state.currentThreadId = state.threads[0]?.id;
-                    state.currentThread = state.threads[0] || null;
+                    state.threadItems = state.threadItems.filter(
+                        (t: ThreadItem) => t.id !== threadItemId && t.id !== realThreadItemId
+                    );
                 });
 
-                // Redirect to /chat page
-                if (typeof window !== 'undefined') {
-                    window.location.href = '/chat';
+                // Check if there are any thread items left for this thread
+                const remainingItems = get().threadItems.filter(item => item.threadId === realThreadId);
+
+                // If no items remain, delete the thread and redirect
+                if (remainingItems.length === 0) {
+                    await ThreadApiService.deleteThread(realThreadId);
+                    set(state => {
+                        state.threads = state.threads.filter((t: Thread) => t.id !== threadId && t.id !== realThreadId);
+                        const nextThread = state.threads[0];
+                        state.currentThreadId = nextThread?.id || null;
+                        state.currentThread = nextThread || null;
+                    });
+
+                    // Redirect to /chat page
+                    if (typeof window !== 'undefined') {
+                        window.location.href = '/chat';
+                    }
                 }
+            } catch (error) {
+                console.error('Failed to delete thread item:', error);
             }
         },
 
         deleteThread: async threadId => {
-            await db.threads.delete(threadId);
-            await db.threadItems.where('threadId').equals(threadId).delete();
-            set(state => {
-                state.threads = state.threads.filter((t: Thread) => t.id !== threadId);
-                state.currentThreadId = state.threads[0]?.id;
-                state.currentThread = state.threads[0] || null;
-            });
-
-            // Notify other tabs
-            debouncedNotify('thread-delete', { threadId });
+            try {
+                // Check if this is an optimistic ID and map it to real ID
+                const realId = get().getRealIdFromOptimistic(threadId) || threadId;
+                
+                await ThreadApiService.deleteThread(realId);
+                set(state => {
+                    state.threads = state.threads.filter((t: Thread) => t.id !== threadId && t.id !== realId);
+                    const nextThread = state.threads[0];
+                    state.currentThreadId = nextThread?.id || null;
+                    state.currentThread = nextThread || null;
+                });
+            } catch (error) {
+                console.error('Failed to delete thread:', error);
+            }
         },
 
         getPreviousThreadItems: threadId => {
             const state = get();
+            let targetThreadId = threadId || state.currentThreadId;
+            
+            // Check if this is an optimistic ID and map it to real ID for filtering
+            if (targetThreadId) {
+                const realId = get().getRealIdFromOptimistic(targetThreadId);
+                if (realId) {
+                    targetThreadId = realId;
+                }
+            }
 
             const allThreadItems = state.threadItems
-                .filter(item => item.threadId === threadId)
+                .filter(item => item.threadId === targetThreadId)
                 .sort((a, b) => {
-                    return a.createdAt.getTime() - b.createdAt.getTime();
+                    const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
+                    const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
+                    return aTime - bTime;
                 });
 
             if (allThreadItems.length > 1) {
@@ -906,13 +817,24 @@ export const useChatStore = create(
             return [];
         },
 
-        getCurrentThreadItem: () => {
+        getCurrentThreadItem: (threadId?: string) => {
             const state = get();
+            let targetThreadId = threadId || state.currentThreadId;
+            
+            // Check if this is an optimistic ID and map it to real ID for filtering
+            if (targetThreadId) {
+                const realId = get().getRealIdFromOptimistic(targetThreadId);
+                if (realId) {
+                    targetThreadId = realId;
+                }
+            }
 
             const allThreadItems = state.threadItems
-                .filter(item => item.threadId === state.currentThreadId)
+                .filter(item => item.threadId === targetThreadId)
                 .sort((a, b) => {
-                    return a.createdAt.getTime() - b.createdAt.getTime();
+                    const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
+                    const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
+                    return aTime - bTime;
                 });
             return allThreadItems[allThreadItems.length - 1] || null;
         },
@@ -921,11 +843,131 @@ export const useChatStore = create(
             const state = get();
             return state.threads.find(t => t.id === state.currentThreadId) || null;
         },
+
+        setDomain: (domain: string) => {
+            set(state => {
+                state.domain = domain;
+                // Optionally set domain-specific custom instructions
+                if (domain === 'legal' && !state.customInstructions) {
+                    state.customInstructions = 'Focus only on legal matters. If asked about non-legal topics, politely decline and suggest using the appropriate domain.';
+                } else if (domain === 'civil_engineering' && !state.customInstructions) {
+                    state.customInstructions = 'Focus only on civil engineering and construction topics. If asked about non-engineering topics, politely decline and suggest using the appropriate domain.';
+                } else if (domain === 'real_estate' && !state.customInstructions) {
+                    state.customInstructions = 'Focus only on real estate and property topics. If asked about non-real estate topics, politely decline and suggest using the appropriate domain.';
+                }
+            });
+        },
+
+        isThreadExpertCertified: (threadId: string) => {
+            const state = get();
+            
+            // Check if this is an optimistic ID and map it to real ID for lookup
+            const realId = get().getRealIdFromOptimistic(threadId) || threadId;
+            
+            const thread = state.threads.find(t => t.id === realId || t.id === threadId);
+            if (!thread) return false;
+
+            // Use the actual certifiedStatus field from the database
+            return thread.certifiedStatus === 'CERTIFIED';
+        },
+
+        getExpertCertificationStatus: (threadId: string) => {
+            const state = get();
+            
+            // Check if this is an optimistic ID and map it to real ID for lookup
+            const realId = get().getRealIdFromOptimistic(threadId) || threadId;
+            
+            const thread = state.threads.find(t => t.id === realId || t.id === threadId);
+            if (!thread) return 'none';
+
+            // Use the actual certifiedStatus field from the database
+            switch (thread.certifiedStatus) {
+                case 'CERTIFIED':
+                    return 'expert-certified';
+                case 'NOT_CERTIFIED':
+                    return 'not-certified';
+                case 'PENDING':
+                default:
+                    return 'none';
+            }
+        },
+
+        updateThreadCertifiedStatus: async (threadId: string, certifiedStatus: 'PENDING' | 'CERTIFIED' | 'NOT_CERTIFIED') => {
+            try {
+                // Check if this is an optimistic ID and map it to real ID
+                const realId = get().getRealIdFromOptimistic(threadId) || threadId;
+                
+                await ThreadApiService.updateThread(realId, { certifiedStatus });
+                
+                set(state => {
+                    const index = state.threads.findIndex(t => t.id === realId || t.id === threadId);
+                    if (index !== -1) {
+                        state.threads[index].certifiedStatus = certifiedStatus;
+                    }
+                    if (state.currentThreadId === threadId || state.currentThreadId === realId) {
+                        if (state.currentThread) {
+                            state.currentThread.certifiedStatus = certifiedStatus;
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to update thread certified status:', error);
+            }
+        },
+
+        // Optimistic ID mapping actions
+        setOptimisticIdMapping: (realId: string, optimisticId: string) => {
+            set(state => {
+                state.optimisticIdMap[realId] = optimisticId;
+            });
+        },
+        getOptimisticIdFromReal: (realId: string) => {
+            return get().optimisticIdMap[realId] || null;
+        },
+        getRealIdFromOptimistic: (optimisticId: string) => {
+            // Reverse lookup: find the key (realId) that has this value (optimisticId)
+            const map = get().optimisticIdMap;
+            for (const realId in map) {
+                if (map[realId] === optimisticId) {
+                    return realId;
+                }
+            }
+            return null;
+        },
+        clearOptimisticIdMapping: (realId: string) => {
+            set(state => {
+                delete state.optimisticIdMap[realId];
+            });
+        },
+        // Thread item optimistic ID mapping actions
+        setOptimisticThreadItemIdMapping: (realThreadItemId: string, optimisticThreadItemId: string) => {
+            set(state => {
+                state.optimisticThreadItemIdMap[realThreadItemId] = optimisticThreadItemId;
+            });
+        },
+        getOptimisticThreadItemIdFromReal: (realThreadItemId: string) => {
+            return get().optimisticThreadItemIdMap[realThreadItemId] || null;
+        },
+        getRealThreadItemIdFromOptimistic: (optimisticThreadItemId: string) => {
+            // Reverse lookup: find the key (realThreadItemId) that has this value (optimisticThreadItemId)
+            const map = get().optimisticThreadItemIdMap;
+            for (const realThreadItemId in map) {
+                if (map[realThreadItemId] === optimisticThreadItemId) {
+                    return realThreadItemId;
+                }
+            }
+            return null;
+        },
+        clearOptimisticThreadItemIdMapping: (realThreadItemId: string) => {
+            set(state => {
+                delete state.optimisticThreadItemIdMap[realThreadItemId];
+            });
+        },
     }))
 );
 
 if (typeof window !== 'undefined') {
-    // Initialize store with data from IndexedDB
+    // Initialize store with data from API
     loadInitialData().then(
         ({
             threads,
@@ -944,14 +986,6 @@ if (typeof window !== 'undefined') {
                 showSuggestions,
                 customInstructions,
             });
-
-            // Initialize the shared worker for tab synchronization
-            if ('SharedWorker' in window) {
-                initializeWorker();
-            } else {
-                // Fallback to localStorage method
-                initializeTabSync();
-            }
         }
     );
 }

@@ -38,6 +38,7 @@ ctx.addEventListener('message', async (event: MessageEvent) => {
                 config,
                 apiKeys: newApiKeys,
                 mcpConfig,
+                domain,
             } = payload;
 
             // Set API keys if provided
@@ -66,6 +67,7 @@ ctx.addEventListener('message', async (event: MessageEvent) => {
                 messages,
                 config,
                 mcpConfig,
+                domain,
                 onFinish: (data: any) => {},
             });
 
